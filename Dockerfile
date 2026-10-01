@@ -19,7 +19,11 @@ COPY --from=builder /repo/apps/web/.next/standalone ./
 COPY --from=builder /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /repo/apps/web/public ./apps/web/public
 RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+# Start as root so the entrypoint can fix ownership of the mounted volume,
+# then drop privileges to the node user before launching the app.
+COPY setup-volume.sh /usr/local/bin/setup-volume.sh
+RUN chmod +x /usr/local/bin/setup-volume.sh
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
+ENTRYPOINT ["/usr/local/bin/setup-volume.sh"]
 CMD ["node", "apps/web/server.js"]

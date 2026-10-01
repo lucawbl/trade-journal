@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { accessSync, constants, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as schema from "./schema";
 import { BOOTSTRAP_SQL } from "./bootstrap";
@@ -11,7 +11,14 @@ const globalForDb = globalThis as unknown as { __journalDb?: ReturnType<typeof c
 
 const createDb = () => {
   const dir = dataDir();
-  mkdirSync(dir, { recursive: true });
+  try {
+    mkdirSync(dir, { recursive: true });
+    accessSync(dir, constants.R_OK | constants.W_OK);
+  } catch (error) {
+    throw new Error(
+      `Journal data directory "${dir}" is not writable: ${(error as Error).message}`,
+    );
+  }
   const sqlite = new Database(join(dir, "journal.db"));
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
