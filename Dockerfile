@@ -11,6 +11,7 @@ COPY tsconfig.base.json ./
 RUN pnpm --filter web build
 
 FROM node:22-slim AS runner
+RUN apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV JOURNAL_DATA_DIR=/data
 WORKDIR /app
@@ -18,8 +19,10 @@ WORKDIR /app
 COPY --from=builder /repo/apps/web/.next/standalone ./
 COPY --from=builder /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /repo/apps/web/public ./apps/web/public
-RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+COPY docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
+# No USER directive: the entrypoint starts as root to fix volume permissions,
+# then drops to the node user via gosu.
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["node", "apps/web/server.js"]
+CMD ["/app/docker-entrypoint.sh"]
