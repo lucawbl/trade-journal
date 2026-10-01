@@ -18,8 +18,16 @@ WORKDIR /app
 COPY --from=builder /repo/apps/web/.next/standalone ./
 COPY --from=builder /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /repo/apps/web/public ./apps/web/public
-RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends su-exec \
+    && rm -rf /var/lib/apt/lists/*
+COPY apps/web/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && mkdir -p /data \
+    && chown -R node:node /data /app
+# The container starts as root so the entrypoint can fix permissions on the
+# mounted volume; it then drops to the node user via su-exec.
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "apps/web/server.js"]
