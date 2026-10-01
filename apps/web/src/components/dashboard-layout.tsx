@@ -31,6 +31,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable } from "@dnd-
 import { GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardCustomizer } from "@/components/dashboard-customizer";
+
 import { DashboardSavedLayouts } from "@/components/dashboard-saved-layouts";
 import {
   DASHBOARD_LAYOUT_KEY,
@@ -116,10 +117,8 @@ export function DashboardLayout({ widgets }: { widgets: Widget[] }) {
   const dragInput = useDashboardDragInput();
   const lastReorder = useRef<{ x: number; y: number } | null>(null);
   const reducedMotion = useReducedDashboardMotion();
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // Disable drag-and-drop sensors for the hosted bot dashboard. Some browser/runtime
+  // combinations crash during DnD initialization; layout rendering itself does not need them.
 
   useEffect(() => {
     if (!activeId) return;
@@ -370,69 +369,28 @@ export function DashboardLayout({ widgets }: { widgets: Widget[] }) {
           All cards are hidden. Choose Show all cards to restore them.
         </p>
       )}
-      <DndContext
-        key={dragSession}
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        autoScroll={{
-          activator: AutoScrollActivator.Pointer,
-          acceleration: 4,
-          interval: 12,
-          threshold: { x: 0.05, y: 0.07 },
-        }}
-        measuring={{ droppable: { strategy: MeasuringStrategy.WhileDragging } }}
-        onDragStart={startDrag}
-        onDragMove={previewDrag}
-        onDragOver={previewDrag}
-        onDragEnd={finishDrag}
-        onDragCancel={cancelDrag}
-        accessibility={{
-          screenReaderInstructions: {
-            draggable:
-              "Press Space or Enter to pick up a card. Use the arrow keys to move, then Space or Enter to drop. Press Escape to cancel.",
-          },
-          announcements: {
-            onDragStart: ({ active }) => `Picked up ${label(active.id)}.`,
-            onDragOver: ({ active, over }) =>
-              over
-                ? `${label(active.id)} is over ${label(over.id)}.`
-                : "Outside the cards. Drop here to cancel.",
-            onDragEnd: ({ active, over }) =>
-              over
-                ? `${label(active.id)} placed at position ${visible.indexOf(String(active.id)) + 1} of ${visible.length}.`
-                : "Move cancelled.",
-            onDragCancel: () => "Move cancelled. Layout unchanged.",
-          },
-        }}
-      >
-        <SortableContext items={visible} strategy={liveGridStrategy}>
-          <div ref={stageRef} className="dashboard-grid-stage" data-dashboard-stage>
-            <div ref={gridRef} className="dashboard-grid relative grid gap-3" data-dashboard-grid>
-              {rendered.map((id) => (
-                <SortableCard
-                  key={id}
-                  widget={byId.get(id)!}
-                  responsiveSpans={{
-                    compact: compactSpans[id]!,
-                    tablet: tabletSpans[id]!,
-                    desktop: desktopSpans[id]!,
-                  }}
-                  exiting={exiting.has(id)}
-                />
-              ))}
-            </div>
-          </div>
-        </SortableContext>
-        <DragOverlay dropAnimation={reducedMotion ? null : dropAnimation} adjustScale={false}>
-          {snapshot && (
-            <DashboardDragPreview
-              snapshot={snapshot}
-              movement={dragInput.point}
-              reducedMotion={reducedMotion}
-            />
-          )}
-        </DragOverlay>
-      </DndContext>
+      <div ref={stageRef} className="dashboard-grid-stage" data-dashboard-stage>
+        <div ref={gridRef} className="dashboard-grid relative grid gap-3" data-dashboard-grid>
+          {rendered.map((id) => (
+            <section
+              key={id}
+              data-dashboard-card={id}
+              data-card-size={byId.get(id)!.size}
+              aria-label={byId.get(id)!.label}
+              className="dashboard-grid-card relative flex min-w-0 flex-col rounded-xl"
+              style={{
+                "--dashboard-span-compact": compactSpans[id]!,
+                "--dashboard-span-tablet": tabletSpans[id]!,
+                "--dashboard-span-desktop": desktopSpans[id]!,
+              } as CSSProperties}
+            >
+              <div data-dashboard-surface className="dashboard-card-surface relative flex h-full min-w-0 flex-col">
+                <div className="min-w-0 flex-1">{byId.get(id)!.content}</div>
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
