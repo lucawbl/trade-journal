@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { ExecutionCharts } from "@/components/execution-charts";
 import {
   JournalShell,
   Panel,
@@ -84,6 +85,9 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
             frais importés. Il ne représente pas le P&L au prix actuel.
           </p>
         )}
+      </Panel>
+      <Panel title="Entrées et sorties">
+        <ExecutionCharts trade={trade} fills={fills} currency={currency} timeZone={view.timeZone} />
       </Panel>
       <Panel title={`${fills.length} exécution${fills.length === 1 ? "" : "s"}`}>
         <div className="overflow-x-auto">
