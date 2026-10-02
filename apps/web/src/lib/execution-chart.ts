@@ -20,6 +20,7 @@ export function executionChart(trade: RoundTrip, fills: ChartExecution[]) {
         order.has(fill.id) &&
         Number.isFinite(Date.parse(fill.executedAt)) &&
         Number.isFinite(fill.price) &&
+        Number.isFinite(fill.quantity) &&
         fill.quantity > 0,
     )
     .sort(

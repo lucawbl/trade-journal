@@ -3,22 +3,8 @@ import type { EquityPoint } from "@luxalgo/journal-core";
 import type { JournalView } from "@/server/journal-view";
 import { tradePath } from "@/lib/trade-links";
 
-export const number = (value: number | null | undefined, digits = 2) =>
-  value != null && Number.isFinite(value)
-    ? new Intl.NumberFormat("fr-CH", {
-        minimumFractionDigits: digits,
-        maximumFractionDigits: digits,
-      }).format(value)
-    : "—";
-
-export function timestamp(value: string | null, timeZone: string) {
-  if (!value || !Number.isFinite(Date.parse(value))) return "—";
-  return new Intl.DateTimeFormat("fr-CH", {
-    timeZone,
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
+import { number, timestamp } from "@/lib/journal-format";
+export { number, timestamp } from "@/lib/journal-format";
 
 export function PnlValue({ value, currency }: { value: number; currency: string }) {
   return (
