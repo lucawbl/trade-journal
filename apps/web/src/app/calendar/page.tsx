@@ -29,7 +29,11 @@ export default async function CalendarPage({
     `/trades?${new URLSearchParams({ ...filters, from: date, to: date })}`;
   const activity = view.overview.days.filter((day) => day.date.startsWith(selection.key));
   return (
-    <JournalShell title="Calendrier de trading" active="calendar">
+    <JournalShell title="Résultats par jour" active="calendar">
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        Retrouvez le résultat de chaque journée de clôture. Cliquez sur un jour pour voir ses trades
+        ; une sortie partielle reste rattachée à une position ouverte jusqu’à sa clôture complète.
+      </p>
       <Panel title="Comptes et symboles">
         <JournalFilters
           action="/calendar"

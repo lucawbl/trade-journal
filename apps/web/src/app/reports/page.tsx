@@ -102,7 +102,11 @@ export default async function ReportsPage({
   const metrics = view.overview.metrics;
   const breakdown = { currency, monetary };
   return (
-    <JournalShell title="Rapports de performance" active="reports">
+    <JournalShell title="Bilan de performance" active="reports">
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        Comparez les résultats des trades clôturés sur une période, par crypto et par sens. Les
+        positions encore ouvertes et leurs sorties partielles restent suivies dans le dashboard.
+      </p>
       <Panel title="Période et comptes">
         <JournalFilters action="/reports" accounts={view.accounts} filters={filters} closedOnly />
         <p className="mt-3 text-xs text-muted-foreground">

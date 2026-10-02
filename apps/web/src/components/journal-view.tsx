@@ -34,7 +34,7 @@ export function JournalShell({
       </a>
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-8">
-          <a href="/" className="flex items-center gap-3 font-semibold">
+          <div className="flex items-center gap-3 font-semibold">
             <span aria-hidden="true" className="rounded-lg bg-brand/15 px-3 py-2 text-brand">
               TJ
             </span>
@@ -44,7 +44,7 @@ export function JournalShell({
                 Suivi de trading · Comptes démo
               </span>
             </span>
-          </a>
+          </div>
           <nav
             aria-label="Navigation principale"
             className="flex max-w-full flex-wrap gap-1 rounded-lg border p-1 text-sm"
@@ -53,10 +53,10 @@ export function JournalShell({
               [
                 ["dashboard", "/", "Dashboard"],
                 ["market", "/market", "Marché"],
-                ["trades", "/trades", "Trades"],
-                ["accounts", "/accounts", "Accounts"],
-                ["reports", "/reports", "Rapports"],
-                ["calendar", "/calendar", "Calendrier"],
+                ["trades", "/trades", "Historique"],
+                ["accounts", "/accounts", "Comptes"],
+                ["reports", "/reports", "Bilan"],
+                ["calendar", "/calendar", "Par jour"],
               ] as const
             ).map(([key, href, label]) => (
               <a

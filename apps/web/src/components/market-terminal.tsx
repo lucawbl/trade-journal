@@ -15,7 +15,6 @@ import {
   Redo2,
   Maximize,
   Minimize,
-  Camera,
   Crosshair,
   Minus,
   Spline,
@@ -24,10 +23,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  Settings2,
-  ChevronDown,
   X,
-  Save,
   Download,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -35,9 +31,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useLiveMarket } from "@/hooks/use-live-market";
 import { LIVE_SYMBOLS, type LiveSymbol, type LiveSnapshot } from "@/lib/live-market";
 import type { Resolution } from "@/lib/market-data";
-import { number, priceNumber, timestamp } from "@/lib/journal-format";
+import { number, priceNumber } from "@/lib/journal-format";
 import {
-  testWma,
   INDICATOR_CATALOG,
   NO_INDICATORS,
   type IndicatorSelection,
@@ -52,7 +47,6 @@ const Canvas = dynamic(() => import("./terminal-canvas").then((m) => m.TerminalC
   ssr: false,
   loading: () => <p className="p-8">Préparation du graphique…</p>,
 });
-type Tab = "scanner" | "indicators" | "strategy" | "trades";
 type Alert = {
   id: string;
   symbol: LiveSymbol;
@@ -62,29 +56,6 @@ type Alert = {
 };
 const EMPTY: TerminalTrade["events"] = [];
 const NO_LEVELS: TerminalTrade["levels"] = [];
-function WatchRow({
-  symbol,
-  onSelect,
-}: {
-  symbol: LiveSymbol;
-  onSelect: (value: LiveSymbol) => void;
-}) {
-  const { snapshot, status } = useLiveMarket(symbol, "1m", true);
-  return (
-    <tr>
-      <td>
-        <button className={s.button} onClick={() => onSelect(symbol)}>
-          {symbol.replace("USDT", " / USDT")}
-        </button>
-      </td>
-      <td>{snapshot ? priceNumber(snapshot.price) : "—"}</td>
-      <td className={snapshot && snapshot.changePct < 0 ? s.down : s.up}>
-        {snapshot ? `${number(snapshot.changePct, 2)} %` : "—"}
-      </td>
-      <td>{status}</td>
-    </tr>
-  );
-}
 export function MarketTerminal({
   initialSymbol,
   initialResolution,
@@ -105,6 +76,7 @@ export function MarketTerminal({
   const [indicators, setIndicators] = useState<IndicatorSelection>({ ...NO_INDICATORS });
   const [indicatorDialog, setIndicatorDialog] = useState(false);
   const [indicatorSearch, setIndicatorSearch] = useState("");
+  const [exportDialog, setExportDialog] = useState(false);
   const [period, setPeriod] = useState(9),
     [tool, setTool] = useState<DrawingTool>("cursor");
   const [drawings, setDrawings] = useState<Record<string, Drawing[]>>({}),
@@ -112,8 +84,7 @@ export function MarketTerminal({
   const [loaded, setLoaded] = useState(false),
     [nav, setNav] = useState(false),
     [fullscreen, setFullscreen] = useState(false);
-  const [tab, setTab] = useState<Tab>("trades"),
-    [panel, setPanel] = useState(false),
+  const [panel, setPanel] = useState(false),
     [notice, setNotice] = useState("");
   const [alertDialog, setAlertDialog] = useState(false),
     [alertPrice, setAlertPrice] = useState(""),
@@ -256,10 +227,6 @@ export function MarketTerminal({
           : null,
     [snapshot, replay, replayIndex, symbol, resolution],
   );
-  const research = useMemo(
-    () => testWma((history?.bars ?? []).slice(0, -1), period),
-    [history?.bars, period],
-  );
   const triggered = alerts.filter((a) => a.triggered);
   const toggleFullscreen = async () => {
     if (fullscreen) {
@@ -380,9 +347,9 @@ export function MarketTerminal({
         Aller au graphique
       </a>
       <div className={s.top}>
-        <a href="/" className={s.brand}>
+        <span className={s.brand}>
           TJ <span className={s.muted}>/</span> Terminal
-        </a>
+        </span>
         <span className={s.muted}>
           {symbol.replace("USDT", "")} · {resolution}
         </span>
@@ -476,16 +443,6 @@ export function MarketTerminal({
         <span className={s.spacer} />
         <button
           className={s.button}
-          aria-label="Paramètres des indicateurs"
-          onClick={() => {
-            setTab("indicators");
-            setPanel(true);
-          }}
-        >
-          <Settings2 size={18} />
-        </button>
-        <button
-          className={s.button}
           aria-label={fullscreen ? "Quitter le plein écran" : "Plein écran"}
           onClick={toggleFullscreen}
         >
@@ -493,20 +450,11 @@ export function MarketTerminal({
         </button>
         <button
           className={s.button}
-          aria-label="Télécharger le graphique en PNG"
-          onClick={screenshot}
+          aria-label="Exporter le graphique"
+          title="Exporter"
+          onClick={() => setExportDialog(true)}
         >
-          <Camera size={18} />
-        </button>
-        <button
-          className={`${s.button} ${s.primary}`}
-          aria-label="Enregistrer la disposition"
-          onClick={() =>
-            setNotice("Disposition et tracés enregistrés automatiquement sur cet appareil.")
-          }
-        >
-          <Save size={15} />
-          <span className={s.label}>Enregistré</span>
+          <Download size={18} />
         </button>
       </header>
       {nav && (
@@ -514,10 +462,10 @@ export function MarketTerminal({
           {[
             ["/", "Dashboard"],
             ["/market", "Marché"],
-            ["/trades", "Trades"],
+            ["/trades", "Historique"],
             ["/accounts", "Comptes"],
-            ["/reports", "Rapports"],
-            ["/calendar", "Calendrier"],
+            ["/reports", "Bilan"],
+            ["/calendar", "Par jour"],
           ].map(([href, label]) => (
             <a key={href} href={href}>
               {label}
@@ -608,7 +556,11 @@ export function MarketTerminal({
           <button className={s.button} aria-label="Zoom arrière" onClick={() => zoom(1.4)}>
             <ZoomOut size={19} />
           </button>
-          <button className={s.button} aria-label="Réinitialiser le zoom" onClick={() => range(60)}>
+          <button
+            className={s.button}
+            aria-label="Recentrer le graphique"
+            onClick={() => range(60)}
+          >
             <RotateCcw size={18} />
           </button>
           <span className={s.spacer} />
@@ -675,14 +627,8 @@ export function MarketTerminal({
             </p>
           )}
           <div className={s.range}>
-            <button className={s.button} onClick={() => range(90)}>
-              30 bougies
-            </button>
-            <button className={s.button} onClick={() => range(60)}>
-              120
-            </button>
             <button className={s.button} onClick={() => range(0)}>
-              Tout
+              Toutes les bougies
             </button>
             <button
               className={s.button}
@@ -690,13 +636,6 @@ export function MarketTerminal({
               onClick={() => setEnabled((v) => !v)}
             >
               {enabled ? <Pause size={14} /> : <Play size={14} />}
-            </button>
-            <button
-              className={s.button}
-              aria-label="Exporter les bougies en CSV"
-              onClick={exportBars}
-            >
-              <Download size={14} />
             </button>
             <span className={s.spacer} />
             <span className={s.muted} data-live-updated>
@@ -709,209 +648,78 @@ export function MarketTerminal({
             >
               log
             </button>
-            <button className={`${s.button} ${s.active}`} onClick={() => range(60)}>
-              auto
-            </button>
           </div>
-          <div className={s.tabs} role="tablist" aria-label="Panneaux du terminal">
-            {(
-              [
-                ["scanner", "Screener crypto"],
-                ["indicators", "Indicateurs"],
-                ["strategy", "Testeur de stratégie"],
-                ["trades", "Trading panel"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                id={`tab-${value}`}
-                role="tab"
-                aria-selected={panel && tab === value}
-                aria-controls="terminal-panel"
-                className={`${s.button} ${panel && tab === value ? s.active : ""}`}
-                onClick={() => {
-                  setPanel((v) => (tab === value ? !v : true));
-                  setTab(value);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-            <span className={s.spacer} />
+          <div className={s.tabs}>
             <button
-              className={s.button}
-              aria-label={panel ? "Réduire le panneau" : "Ouvrir le panneau"}
-              onClick={() => setPanel((v) => !v)}
+              id="chart-trades-toggle"
+              className={`${s.button} ${panel ? s.active : ""}`}
+              aria-expanded={panel}
+              aria-controls="chart-trades-panel"
+              onClick={() => setPanel((value) => !value)}
             >
-              {panel ? <Minus size={16} /> : <ChevronDown size={16} />}
+              Trade affiché <span aria-hidden="true">{panel ? "−" : "+"}</span>
             </button>
           </div>
           {panel && (
-            <div
-              id="terminal-panel"
-              role="tabpanel"
-              aria-labelledby={`tab-${tab}`}
+            <section
+              id="chart-trades-panel"
+              aria-labelledby="chart-trades-toggle"
               className={s.panel}
             >
-              {tab === "scanner" && (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Symbole</th>
-                      <th>Prix USDT</th>
-                      <th>24 h</th>
-                      <th>Flux</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {LIVE_SYMBOLS.map((pair) => (
-                      <WatchRow key={pair} symbol={pair} onSelect={setSymbol} />
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {tab === "indicators" && (
+              <div className={s.config}>
+                <label className="min-w-0 flex-1 flex-wrap">
+                  Sélectionner le trade
+                  <select
+                    aria-label="Trade affiché sur le graphique"
+                    className="min-w-0 w-full max-w-full rounded border bg-background p-2"
+                    value={selected?.key ?? ""}
+                    onChange={(event) => setSelectedTrade(event.target.value)}
+                  >
+                    {symbolTrades.length ? (
+                      symbolTrades.map((trade) => (
+                        <option key={trade.key} value={trade.key}>
+                          {trade.openedAt.replace("T", " ").slice(0, 16)} ·{" "}
+                          {trade.status === "open" ? "Ouvert" : "Clôturé"}
+                        </option>
+                      ))
+                    ) : (
+                      <option>Aucun trade</option>
+                    )}
+                  </select>
+                </label>
+                <button className={s.button} onClick={() => router.refresh()}>
+                  Actualiser les trades
+                </button>
+              </div>
+              {selected && (
                 <>
-                  <div className={s.config}>
-                    {INDICATOR_CATALOG.map(({ key, name }) => (
-                      <label key={key}>
-                        <input
-                          type="checkbox"
-                          checked={indicators[key]}
-                          onChange={(e) =>
-                            setIndicators((i) => ({ ...i, [key]: e.target.checked }))
-                          }
-                        />
-                        {name}
-                      </label>
-                    ))}
-                    <label>
-                      Période WMA
-                      <input
-                        aria-label="Période WMA"
-                        type="number"
-                        min={3}
-                        max={100}
-                        value={period}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          if (Number.isInteger(value) && value >= 3 && value <= 100)
-                            setPeriod(value);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <p className={`${s.muted} mt-5`}>
-                    Les indicateurs sélectionnés se calculent sur les bougies affichées. Un panneau
-                    désactivé disparaît automatiquement.
-                    <button
-                      className={s.button}
-                      onClick={() => setIndicators({ ...NO_INDICATORS })}
-                    >
-                      Retirer tous les indicateurs
-                    </button>
-                  </p>
+                  <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className={s.muted}>Prix moyen d’entrée</dt>
+                      <dd>{priceNumber(selected.avgEntry)} USDT</dd>
+                    </div>
+                    <div>
+                      <dt className={s.muted}>Quantité restante</dt>
+                      <dd>{number(selected.openQuantity, 6)}</dd>
+                    </div>
+                    <div>
+                      <dt className={s.muted}>Résultat déjà réalisé</dt>
+                      <dd className={selected.netPnl < 0 ? s.down : s.up}>
+                        {number(selected.netPnl, 4)} USDT
+                      </dd>
+                    </div>
+                  </dl>
+                  <a className="mt-4 inline-block text-sm" href={tradePath(selected.key)}>
+                    Détail des exécutions
+                  </a>
                 </>
               )}
-              {tab === "strategy" && (
-                <>
-                  <div className={s.config}>
-                    <div className={s.metric}>
-                      Capital initial<strong>1’000 USDT</strong>
-                    </div>
-                    <div className={s.metric}>
-                      Performance simulée
-                      <strong className={research.returnPct < 0 ? s.down : s.up}>
-                        {number(research.returnPct, 2)} %
-                      </strong>
-                    </div>
-                    <div className={s.metric}>
-                      Trades clôturés<strong>{research.trades.length}</strong>
-                    </div>
-                    <div className={s.metric}>
-                      Capital estimé<strong>{number(research.equity, 2)} USDT</strong>
-                    </div>
-                  </div>
-                  <p className={`${s.muted} mt-4`}>
-                    Simulation long WMA {period} sur les bougies chargées et clôturées. Signal au
-                    croisement, exécution à l’ouverture suivante, frais de 0,1 % par côté.{" "}
-                    {research.open ? "Position finale valorisée au dernier cours. " : ""}Sans
-                    slippage. Cette simulation n’est pas la stratégie du bot et ne passe aucun
-                    ordre.
-                  </p>
-                </>
-              )}
-              {tab === "trades" && (
-                <>
-                  <div className={s.config}>
-                    <label>
-                      Trade affiché
-                      <select
-                        aria-label="Trade affiché sur le graphique"
-                        className="max-w-full rounded border bg-background p-2"
-                        value={selected?.key ?? ""}
-                        onChange={(e) => setSelectedTrade(e.target.value)}
-                      >
-                        {symbolTrades.length ? (
-                          symbolTrades.map((t) => (
-                            <option key={t.key} value={t.key}>
-                              {t.symbol} · {t.openedAt.replace("T", " ").slice(0, 16)} ·{" "}
-                              {t.status === "open" ? "Ouvert" : "Clôturé"}
-                            </option>
-                          ))
-                        ) : (
-                          <option>Aucun trade</option>
-                        )}
-                      </select>
-                    </label>
-                    <button
-                      className={s.button}
-                      onClick={() => {
-                        router.refresh();
-                        setNotice("Actualisation des trades du journal.");
-                      }}
-                    >
-                      Actualiser les trades
-                    </button>
-                    <a href={`/trades?symbol=${symbol}`}>Historique complet</a>
-                  </div>
-                  <p className={`${s.muted} my-3`}>
-                    ▲ Entrées · ◆ Sorties · SL rouge / TP vert de référence, calculés avec les
-                    paramètres actuels du bot. Exécutions démo/testnet, cours Binance Spot. Les
-                    événements antérieurs aux bougies chargées restent accessibles dans le détail du
-                    trade.
-                  </p>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Trade</th>
-                        <th>Compte</th>
-                        <th>Prix d’entrée</th>
-                        <th>Quantité ouverte</th>
-                        <th>P&amp;L réalisé</th>
-                        <th>Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {symbolTrades.map((t) => (
-                        <tr key={t.key}>
-                          <td>
-                            <a href={tradePath(t.key)}>{timestamp(t.openedAt, timeZone)}</a>
-                          </td>
-                          <td>{t.account}</td>
-                          <td>{priceNumber(t.avgEntry)}</td>
-                          <td>{number(t.openQuantity, 6)}</td>
-                          <td className={t.netPnl < 0 ? s.down : s.up}>
-                            {number(t.netPnl, 4)} USDT
-                          </td>
-                          <td>{t.status === "open" ? "Ouvert" : "Clôturé"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
-            </div>
+              <p className={`${s.muted} mt-3`}>
+                ▲ Entrées · ◆ Sorties · SL rouge / TP vert de référence, calculés avec les
+                paramètres actuels du bot. Les exécutions démo/testnet peuvent différer des prix
+                Binance Spot.
+              </p>
+            </section>
           )}
         </section>
       </div>
@@ -955,6 +763,23 @@ export function MarketTerminal({
               </label>
             ))}
           </div>
+          {indicators.wma && (
+            <label className="flex items-center gap-3 text-sm">
+              Période WMA
+              <input
+                aria-label="Période WMA"
+                type="number"
+                min={3}
+                max={100}
+                value={period}
+                className="w-20 rounded border bg-background px-2 py-1"
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (Number.isInteger(value) && value >= 3 && value <= 100) setPeriod(value);
+                }}
+              />
+            </label>
+          )}
           <div className="flex items-center justify-between gap-3">
             <button
               className="rounded border px-3 py-2 text-sm"
@@ -969,6 +794,34 @@ export function MarketTerminal({
               Terminé
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={exportDialog} onOpenChange={setExportDialog}>
+        <DialogContent container={host.current}>
+          <DialogHeader>
+            <DialogTitle>Exporter le graphique</DialogTitle>
+            <DialogDescription>
+              Choisissez une image du graphique ou les données des bougies affichées.
+            </DialogDescription>
+          </DialogHeader>
+          <button
+            className="rounded border p-3 text-left text-sm hover:bg-secondary"
+            onClick={() => {
+              screenshot();
+              setExportDialog(false);
+            }}
+          >
+            Image PNG
+          </button>
+          <button
+            className="rounded border p-3 text-left text-sm hover:bg-secondary"
+            onClick={() => {
+              exportBars();
+              setExportDialog(false);
+            }}
+          >
+            Bougies CSV
+          </button>
         </DialogContent>
       </Dialog>
       <Dialog open={alertDialog} onOpenChange={setAlertDialog}>
