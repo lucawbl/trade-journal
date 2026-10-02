@@ -513,9 +513,20 @@ export function TerminalCanvas({
         data: risk("stopLoss"),
         markArea: {
           silent: true,
-          label: { show: false },
-          itemStyle: { color: "#f2364522", borderColor: "#f2364566", borderWidth: 1 },
-          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss"),
+          label: {
+            show: true,
+            position: "insideTopRight",
+            color: "#f23645",
+            fontSize: 11,
+            formatter: (params: unknown) => {
+              const value = (params as { data?: { name?: string } }).data;
+              return value?.name ?? "SL";
+            },
+          },
+          itemStyle: { color: "#f2364516", borderColor: "#f2364599", borderWidth: 1 },
+          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss").map(
+            ([start, end]) => [{ ...start, name: "SL · " + priceNumber(end.yAxis) }, end],
+          ),
         },
         step: "end",
         showSymbol: false,
@@ -528,9 +539,20 @@ export function TerminalCanvas({
         data: risk("takeProfit"),
         markArea: {
           silent: true,
-          label: { show: false },
-          itemStyle: { color: "#08998122", borderColor: "#08998166", borderWidth: 1 },
-          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit"),
+          label: {
+            show: true,
+            position: "insideTopRight",
+            color: "#089981",
+            fontSize: 11,
+            formatter: (params: unknown) => {
+              const value = (params as { data?: { name?: string } }).data;
+              return value?.name ?? "TP";
+            },
+          },
+          itemStyle: { color: "#08998116", borderColor: "#08998199", borderWidth: 1 },
+          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit").map(
+            ([start, end]) => [{ ...start, name: "TP · " + priceNumber(end.yAxis) }, end],
+          ),
         },
         step: "end",
         showSymbol: false,

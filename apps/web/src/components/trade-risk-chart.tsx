@@ -27,7 +27,7 @@ export function TradeRiskChart({
   risk: BotRisk | null;
   timeZone: string;
 }) {
-  const [mode, setMode] = useState<"live" | "history">("live");
+  const [mode, setMode] = useState<"live" | "history">(trade.closedAt ? "history" : "live");
   const [history, setHistory] = useState<MarketHistory | null>(null);
   const [error, setError] = useState("");
   const [resolution, setResolution] = useState("");
