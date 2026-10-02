@@ -89,7 +89,7 @@ export function JournalShell({
         <footer className="border-t pt-4 text-xs text-muted-foreground">
           {active === "market"
             ? "Marché Binance Spot · Données en direct, sans passage d’ordres."
-            : "Données du journal SQLite · Activez l’actualisation automatique pour suivre les nouvelles exécutions."}
+            : "Les résultats incluent les frais enregistrés. Les positions ouvertes restent séparées des résultats clôturés."}
         </footer>
       </div>
     </main>
@@ -107,9 +107,9 @@ export function Panel({ title, children }: { title: string; children: ReactNode 
 
 export function Metric({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
   return (
-    <div className="card-sheen rounded-xl border bg-card p-5">
+    <div className="card-sheen min-w-0 rounded-xl border bg-card p-4 sm:p-5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="tnum mt-2 text-2xl font-semibold">{value}</div>
+      <div className="tnum mt-2 break-words text-xl font-semibold sm:text-2xl">{value}</div>
       <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
     </div>
   );
@@ -118,7 +118,7 @@ export function Metric({ label, value, hint }: { label: string; value: ReactNode
 export function SummaryMetrics({ view }: { view: JournalView }) {
   const m = view.overview.metrics;
   return (
-    <section aria-label="Statistiques" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <section aria-label="Statistiques" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Metric
         label="Trades"
         value={m.totalTrades}
@@ -163,61 +163,105 @@ export function TradeTable({ view, limit }: { view: JournalView; limit?: number 
   if (!rows.length)
     return <p className="py-5 text-sm text-muted-foreground">Aucun trade pour cette sélection.</p>;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full whitespace-nowrap text-left text-sm">
-        <caption className="sr-only">Trades du journal, du plus récent au plus ancien</caption>
-        <thead className="text-xs text-muted-foreground">
-          <tr>
-            {[
-              "Symbole / compte",
-              "Ouverture",
-              "Sens",
-              "Statut",
-              "Qté entrée / restante",
-              "Prix entrée",
-              "Prix sortie",
-              "P&L net enregistré",
-            ].map((label) => (
-              <th key={label} scope="col" className="px-3 pb-3 font-normal first:pl-0">
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((trade) => (
-            <tr key={trade.key} className="border-t">
-              <td className="py-4 pr-3">
-                <a className="font-medium text-brand hover:underline" href={tradePath(trade.key)}>
-                  {trade.symbol}
-                </a>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {accounts.get(trade.accountId)?.name ?? trade.accountId}
-                </p>
-              </td>
-              <td className="px-3 text-xs text-muted-foreground">
-                {timestamp(trade.openedAt, view.timeZone)}
-              </td>
-              <td className="px-3">{trade.direction === "long" ? "Long" : "Short"}</td>
-              <td className="px-3">
-                <Status trade={trade} />
-              </td>
-              <td className="tnum px-3">
-                {number(trade.quantity, 4)} / {number(trade.openQuantity, 4)}
-              </td>
-              <td className="tnum px-3">{priceNumber(trade.avgEntry)}</td>
-              <td className="tnum px-3">{priceNumber(trade.avgExit)}</td>
-              <td className="px-3">
-                <PnlValue
-                  value={trade.netPnl}
-                  currency={accounts.get(trade.accountId)?.currency ?? ""}
-                />
-              </td>
+    <>
+      <div className="grid gap-3 md:hidden" aria-label="Trades du journal">
+        {rows.map((trade) => (
+          <article key={trade.key} className="rounded-lg border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <a className="font-semibold text-brand hover:underline" href={tradePath(trade.key)}>
+                {trade.symbol} <span aria-hidden="true">→</span>
+              </a>
+              <Status trade={trade} />
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {accounts.get(trade.accountId)?.name ?? trade.accountId}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {trade.direction === "long" ? "Long" : "Short"} ·{" "}
+              {timestamp(trade.openedAt, view.timeZone)}
+            </p>
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Entrée moyenne</dt>
+                <dd className="tnum mt-1">{priceNumber(trade.avgEntry)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Sortie moyenne</dt>
+                <dd className="tnum mt-1">{priceNumber(trade.avgExit)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Quantité restante</dt>
+                <dd className="tnum mt-1">{number(trade.openQuantity, 6)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Résultat réalisé</dt>
+                <dd className="mt-1">
+                  <PnlValue
+                    value={trade.netPnl}
+                    currency={accounts.get(trade.accountId)?.currency ?? ""}
+                  />
+                </dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full whitespace-nowrap text-left text-sm">
+          <caption className="sr-only">Trades du journal, du plus récent au plus ancien</caption>
+          <thead className="text-xs text-muted-foreground">
+            <tr>
+              {[
+                "Symbole / compte",
+                "Ouverture",
+                "Sens",
+                "Statut",
+                "Qté entrée / restante",
+                "Prix entrée",
+                "Prix sortie",
+                "P&L net enregistré",
+              ].map((label) => (
+                <th key={label} scope="col" className="px-3 pb-3 font-normal first:pl-0">
+                  {label}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((trade) => (
+              <tr key={trade.key} className="border-t">
+                <td className="py-4 pr-3">
+                  <a className="font-medium text-brand hover:underline" href={tradePath(trade.key)}>
+                    {trade.symbol}
+                  </a>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {accounts.get(trade.accountId)?.name ?? trade.accountId}
+                  </p>
+                </td>
+                <td className="px-3 text-xs text-muted-foreground">
+                  {timestamp(trade.openedAt, view.timeZone)}
+                </td>
+                <td className="px-3">{trade.direction === "long" ? "Long" : "Short"}</td>
+                <td className="px-3">
+                  <Status trade={trade} />
+                </td>
+                <td className="tnum px-3">
+                  {number(trade.quantity, 4)} / {number(trade.openQuantity, 4)}
+                </td>
+                <td className="tnum px-3">{priceNumber(trade.avgEntry)}</td>
+                <td className="tnum px-3">{priceNumber(trade.avgExit)}</td>
+                <td className="px-3">
+                  <PnlValue
+                    value={trade.netPnl}
+                    currency={accounts.get(trade.accountId)?.currency ?? ""}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

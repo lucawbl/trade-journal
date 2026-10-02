@@ -15,13 +15,6 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
   const exportQuery = new URLSearchParams({ ...filters, format: "csv" }).toString();
   return (
     <JournalShell title="Historique des trades" active="trades">
-      <nav aria-label="Accès aux cryptomonnaies" className="flex flex-wrap gap-2">
-        {["DOGE", "PEPE", "BTC"].map((coin) => (
-          <a key={coin} href={`/trades?symbol=${coin}USDT`} className="rounded-md border px-4 py-2 text-sm hover:bg-secondary">
-            {coin} / USDT
-          </a>
-        ))}
-      </nav>
       <Panel title="Filtrer l’historique">
         <JournalFilters action="/trades" accounts={view.accounts} filters={filters} />
         <p className="mt-3 text-xs text-muted-foreground">

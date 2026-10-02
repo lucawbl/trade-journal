@@ -14,16 +14,12 @@ export function JournalFilters({
   month?: string;
   closedOnly?: boolean;
 }) {
-  const inputClass = "mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm";
+  const inputClass = "mt-1 min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm";
   return (
-    <form
-      action={action}
-      method="get"
-      className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4"
-    >
+    <form action={action} method="get" className="grid grid-cols-2 items-end gap-3 lg:grid-cols-4">
       {month && <input type="hidden" name="month" value={month} />}
       {closedOnly && <input type="hidden" name="status" value="closed" />}
-      <label className="text-xs text-muted-foreground">
+      <label className="min-w-0 text-xs text-muted-foreground">
         Compte
         <select name="accounts" defaultValue={filters.accounts ?? ""} className={inputClass}>
           <option value="">Tous les comptes</option>
@@ -34,17 +30,23 @@ export function JournalFilters({
           ))}
         </select>
       </label>
-      <label className="text-xs text-muted-foreground">
+      <label className="min-w-0 text-xs text-muted-foreground">
         Symbole
         <input
           name="symbol"
+          list="journal-symbols"
           defaultValue={filters.symbol ?? ""}
           placeholder="DOGEUSDT"
           className={inputClass}
         />
       </label>
+      <datalist id="journal-symbols">
+        {["DOGEUSDT", "PEPEUSDT", "BTCUSDT"].map((symbol) => (
+          <option key={symbol} value={symbol} />
+        ))}
+      </datalist>
       {!closedOnly && (
-        <label className="text-xs text-muted-foreground">
+        <label className="min-w-0 text-xs text-muted-foreground">
           Statut
           <select name="status" defaultValue={filters.status ?? ""} className={inputClass}>
             {[
@@ -62,7 +64,7 @@ export function JournalFilters({
           </select>
         </label>
       )}
-      <label className="text-xs text-muted-foreground">
+      <label className="min-w-0 text-xs text-muted-foreground">
         Sens
         <select name="direction" defaultValue={filters.direction ?? ""} className={inputClass}>
           <option value="">Tous</option>
@@ -72,7 +74,7 @@ export function JournalFilters({
       </label>
       {!month && (
         <>
-          <label className="text-xs text-muted-foreground">
+          <label className="min-w-0 text-xs text-muted-foreground">
             Du
             <input
               type="date"
@@ -81,7 +83,7 @@ export function JournalFilters({
               className={inputClass}
             />
           </label>
-          <label className="text-xs text-muted-foreground">
+          <label className="min-w-0 text-xs text-muted-foreground">
             Au
             <input type="date" name="to" defaultValue={filters.to ?? ""} className={inputClass} />
           </label>

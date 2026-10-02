@@ -361,3 +361,8 @@ New devices start with no indicators; existing device selections are preserved.
 Hover cards show only the pointed pane's values: a four-value OHLC summary on
 price or the relevant oscillator values. Multiple fills in one candle are counted
 in one row rather than expanded into a list.
+
+On phones the journal history uses trade cards instead of a horizontal table;
+desktop keeps the full table. Filters include symbol suggestions in one place.
+The automatic journal refresh preference is saved on the device and restored
+across page navigation; background tabs remain paused.

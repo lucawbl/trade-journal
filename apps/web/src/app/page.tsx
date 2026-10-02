@@ -28,7 +28,7 @@ export default async function DashboardPage() {
       <p className="text-sm text-muted-foreground">
         Les résultats des positions clôturées et le suivi de tes bots, au même endroit.
       </p>
-      <section aria-label="Résumé du journal" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Résumé du journal" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Metric
           label="Résultat clôturé"
           value={

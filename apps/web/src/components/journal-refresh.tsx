@@ -8,6 +8,17 @@ export function JournalRefresh() {
   const [automatic, setAutomatic] = useState(false);
   const [pending, startTransition] = useTransition();
   const [updated, setUpdated] = useState(false);
+  useEffect(() => {
+    try {
+      setAutomatic(localStorage.getItem("journal-auto-refresh") === "true");
+    } catch {}
+  }, []);
+  const changeAutomatic = (value: boolean) => {
+    setAutomatic(value);
+    try {
+      localStorage.setItem("journal-auto-refresh", String(value));
+    } catch {}
+  };
   const refresh = () => {
     startTransition(() => router.refresh());
     setUpdated(true);
@@ -38,7 +49,7 @@ export function JournalRefresh() {
         <input
           type="checkbox"
           checked={automatic}
-          onChange={(event) => setAutomatic(event.target.checked)}
+          onChange={(event) => changeAutomatic(event.target.checked)}
           className="h-4 w-4 accent-[var(--brand)]"
         />
         Automatique · 30 s
