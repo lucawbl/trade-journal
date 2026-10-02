@@ -1,3 +1,5 @@
+import { TradeRiskChart } from "@/components/trade-risk-chart";
+import { readBotRisk } from "@/server/bot-risk";
 import { priceNumber } from "@/lib/journal-format";
 import { notFound } from "next/navigation";
 import { ExecutionCharts } from "@/components/execution-charts";
@@ -26,6 +28,7 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
   const fills = listExecutions(row.accountId, trade.executionIds);
   const account = view.accounts.find((a) => a.id === row.accountId);
   const currency = account?.currency ?? "";
+  const risk = await readBotRisk(row.accountId, row.symbol);
   return (
     <JournalShell title={row.symbol} active="trades">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -86,6 +89,9 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
             frais importés. Il ne représente pas le P&L au prix actuel.
           </p>
         )}
+      </Panel>
+      <Panel title="Bougies, achats/ventes et niveaux SL / TP">
+        <TradeRiskChart trade={trade} fills={fills} risk={risk} timeZone={view.timeZone} />
       </Panel>
       <Panel title="Entrées et sorties">
         <ExecutionCharts trade={trade} fills={fills} currency={currency} timeZone={view.timeZone} />

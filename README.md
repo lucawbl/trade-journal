@@ -303,3 +303,13 @@ Each account accepts only its matching USDT symbol. The bearer ingest secret is
 required. Binance Testnet bot accounts have an initial balance of zero because
 no independent initial bot capital has been supplied; this is not broker equity.
 The shared Binance wallet balance is not duplicated across bot accounts.
+
+### Candle chart and strategy references
+
+Each supported demo bot trade includes a read-only Binance Spot candle chart,
+execution markers, timeframe selection and zoom. SL/TP reference levels use the
+bot's current public strategy parameters and the reconstructed average cost of
+the remaining position. They are not historical stop orders or exit reasons.
+Missing parameters or incomplete execution history hide the references.
+`GET /api/trades/[key]/chart` requires the journal session, bounds candle requests
+to 1,500 bars and never places orders or changes bot configuration.
