@@ -379,3 +379,8 @@ The market chart overlays all imported trades for the selected symbol, not just
 the selected trade. Risk zones are grouped by trade key so overlapping positions
 keep separate entry bases and closure boundaries. Only trades intersecting the
 loaded candle period appear; older trades remain available in their detail chart.
+
+Risk rectangles use a visual Binance candle anchor and preserve the bot risk
+percentages. If the entry is outside the loaded history, the first visible candle
+is the disclosed fallback anchor. This changes visual references only, never
+actual execution prices or orders.

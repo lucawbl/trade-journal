@@ -715,9 +715,10 @@ export function MarketTerminal({
                 </>
               )}
               <p className={`${s.muted} mt-3`}>
-                ▲ Entrées · ◆ Sorties · SL rouge / TP vert de référence, calculés avec les
-                paramètres actuels du bot. Les exécutions démo/testnet peuvent différer des prix
-                Binance Spot.
+                ▲ Entrées · ◆ Sorties · Rectangles SL rouge / TP vert ancrés au cours Binance
+                (bougie d’entrée, ou première bougie visible si l’entrée est hors période), calculés
+                avec les paramètres actuels du bot. Les exécutions démo/testnet peuvent différer des
+                prix Binance Spot.
               </p>
             </section>
           )}

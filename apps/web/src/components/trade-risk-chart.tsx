@@ -144,6 +144,12 @@ export function TradeRiskChart({
           )}
         </>
       )}
+      <p className="text-xs text-muted-foreground">
+        Les rectangles sont ancrés au cours de la bougie d’entrée Binance et conservent les
+        pourcentages SL/TP du bot. Si l’entrée précède les bougies chargées, l’ancrage visuel
+        utilise la première bougie visible. Les prix d’exécution réels restent dans le détail du
+        trade.
+      </p>
       {risk ? (
         <p className="rounded-md border p-3 text-xs text-muted-foreground">
           SL {number(risk.stopLossPct, 2)} % · TP {number(risk.takeProfitPct, 2)} % : repères

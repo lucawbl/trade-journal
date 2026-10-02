@@ -523,9 +523,9 @@ export function TerminalCanvas({
               return value?.name ?? "SL";
             },
           },
-          itemStyle: { color: "#f2364516", borderColor: "#f2364599", borderWidth: 1 },
+          itemStyle: { color: "#f2364525", borderColor: "#f2364599", borderWidth: 1 },
           data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss").map(
-            ([start, end]) => [{ ...start, name: "SL · " + priceNumber(end.yAxis) }, end],
+            ([start, end]) => [{ ...start, name: "SL visuel · " + priceNumber(end.yAxis) }, end],
           ),
         },
         step: "end",
@@ -549,9 +549,9 @@ export function TerminalCanvas({
               return value?.name ?? "TP";
             },
           },
-          itemStyle: { color: "#08998116", borderColor: "#08998199", borderWidth: 1 },
+          itemStyle: { color: "#08998125", borderColor: "#08998199", borderWidth: 1 },
           data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit").map(
-            ([start, end]) => [{ ...start, name: "TP · " + priceNumber(end.yAxis) }, end],
+            ([start, end]) => [{ ...start, name: "TP visuel · " + priceNumber(end.yAxis) }, end],
           ),
         },
         step: "end",

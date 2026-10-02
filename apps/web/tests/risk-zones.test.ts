@@ -52,3 +52,13 @@ it("keeps overlapping trades independent", () => {
     ],
   ]);
 });
+it("anchors visual zones to the crypto candle while preserving risk percentages", () => {
+  const candles = bars.map((bar) => ({ ...bar, open: 50 }));
+  expect(riskZones(candles, 60, [event(0, 2), event(120, 0)], "takeProfit")).toEqual([
+    [
+      { xAxis: 0, yAxis: 50 },
+      { xAxis: 1, yAxis: 60 },
+    ],
+  ]);
+  expect(riskZones(candles, 60, [event(0, 2)], "stopLoss")[0]?.[1].yAxis).toBe(45);
+});

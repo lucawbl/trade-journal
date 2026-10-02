@@ -133,7 +133,7 @@ export function CandleCanvas({
       {
         name: "SL de référence",
         type: "line",
-        data: level("stopLoss"),
+        data: [],
         markArea: {
           silent: true,
           label: {
@@ -146,11 +146,13 @@ export function CandleCanvas({
               return value?.name ?? "SL";
             },
           },
-          itemStyle: { color: "#f2364516", borderColor: "#f2364599", borderWidth: 1 },
-          data: riskZones(bars, step, levels, "stopLoss").map(([start, end]): [typeof start & { name: string }, typeof end] => [
-            { ...start, name: "SL · " + priceNumber(end.yAxis) },
-            end,
-          ]),
+          itemStyle: { color: "#f2364525", borderColor: "#f2364599", borderWidth: 1 },
+          data: riskZones(bars, step, levels, "stopLoss").map(
+            ([start, end]): [typeof start & { name: string }, typeof end] => [
+              { ...start, name: "SL visuel · " + priceNumber(end.yAxis) },
+              end,
+            ],
+          ),
         },
         step: "end",
         showSymbol: false,
@@ -161,7 +163,7 @@ export function CandleCanvas({
       {
         name: "TP de référence",
         type: "line",
-        data: level("takeProfit"),
+        data: [],
         markArea: {
           silent: true,
           label: {
@@ -174,11 +176,13 @@ export function CandleCanvas({
               return value?.name ?? "TP";
             },
           },
-          itemStyle: { color: "#08998116", borderColor: "#08998199", borderWidth: 1 },
-          data: riskZones(bars, step, levels, "takeProfit").map(([start, end]): [typeof start & { name: string }, typeof end] => [
-            { ...start, name: "TP · " + priceNumber(end.yAxis) },
-            end,
-          ]),
+          itemStyle: { color: "#08998125", borderColor: "#08998199", borderWidth: 1 },
+          data: riskZones(bars, step, levels, "takeProfit").map(
+            ([start, end]): [typeof start & { name: string }, typeof end] => [
+              { ...start, name: "TP visuel · " + priceNumber(end.yAxis) },
+              end,
+            ],
+          ),
         },
         step: "end",
         showSymbol: false,
