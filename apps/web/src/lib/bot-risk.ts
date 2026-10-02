@@ -28,7 +28,7 @@ export function riskTimeline(trade: RoundTrip, fills: ChartExecution[], risk: Bo
       quantity = Math.max(0, quantity - event.quantity);
       cost = average * quantity;
     }
-    return { ...event, basis, stopLoss, takeProfit };
+    return { ...event, tradeKey: trade.key, basis, stopLoss, takeProfit };
   });
 }
 

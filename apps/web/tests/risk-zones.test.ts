@@ -34,3 +34,21 @@ it("clips historical intervals and handles short targets below entry", () => {
   expect(riskZones(bars, 60, [event(-120, 2), event(-60, 0)], "stopLoss")).toEqual([]);
   expect(riskZones(bars, 60, [], "takeProfit")).toEqual([]);
 });
+it("keeps overlapping trades independent", () => {
+  const levels = [
+    { ...event(0, 2), tradeKey: "a" },
+    { ...event(60, 1, 200, 180, 240), tradeKey: "b" },
+    { ...event(120, 0), tradeKey: "a" },
+    { ...event(180, 0, 200, 180, 240), tradeKey: "b" },
+  ];
+  expect(riskZones(bars, 60, levels, "takeProfit")).toEqual([
+    [
+      { xAxis: 0, yAxis: 100 },
+      { xAxis: 1, yAxis: 120 },
+    ],
+    [
+      { xAxis: 1, yAxis: 200 },
+      { xAxis: 2, yAxis: 240 },
+    ],
+  ]);
+});

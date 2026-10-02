@@ -611,8 +611,8 @@ export function MarketTerminal({
               line={line}
               drawings={drawings[symbol] ?? []}
               tool={tool}
-              events={selected?.events ?? EMPTY}
-              levels={selected?.levels ?? NO_LEVELS}
+              events={symbolTrades.flatMap((trade) => trade.events)}
+              levels={symbolTrades.flatMap((trade) => trade.levels)}
               timeZone={timeZone}
               height={chartHeight}
               onReady={(c) => {

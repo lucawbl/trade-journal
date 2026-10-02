@@ -16,9 +16,7 @@ export default async function MarketPage({
   await requireJournalSession();
   const params = await searchParams;
   const view = readJournalView();
-  const rows = LIVE_SYMBOLS.flatMap((symbol) =>
-    view.rows.filter((r) => r.symbol === symbol).slice(0, 30),
-  );
+  const rows = LIVE_SYMBOLS.flatMap((symbol) => view.rows.filter((r) => r.symbol === symbol));
   const pairs = [...new Map(rows.map((row) => [`${row.accountId}|${row.symbol}`, row])).entries()];
   const risks = new Map(
     await Promise.all(

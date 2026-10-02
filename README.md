@@ -374,3 +374,8 @@ a quantity-remaining meter (not a profit or capital-allocation percentage).
 Trade charts shade the reference entry-to-SL area red and entry-to-TP area green.
 Zones follow position intervals, update with average entry and stop at full closure.
 These are current bot strategy references, not historical placed stop orders.
+
+The market chart overlays all imported trades for the selected symbol, not just
+the selected trade. Risk zones are grouped by trade key so overlapping positions
+keep separate entry bases and closure boundaries. Only trades intersecting the
+loaded candle period appear; older trades remain available in their detail chart.

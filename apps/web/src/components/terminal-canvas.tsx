@@ -510,7 +510,7 @@ export function TerminalCanvas({
         id: "sl",
         name: "SL de référence",
         type: "line",
-        data: risk("stopLoss"),
+        data: [],
         markArea: {
           silent: true,
           label: {
@@ -536,7 +536,7 @@ export function TerminalCanvas({
         id: "tp",
         name: "TP de référence",
         type: "line",
-        data: risk("takeProfit"),
+        data: [],
         markArea: {
           silent: true,
           label: {
