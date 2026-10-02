@@ -349,7 +349,7 @@ shows current-strategy SL/TP references. Pine Script and broker order submission
 are not implemented by this terminal.
 
 The dashboard separates summary metrics, bots and open positions, closed-result
-evolution and recent closures. Bilan compares closed-trade performance; Par jour
+evolution and recent trades. Bilan compares closed-trade performance; Par jour
 groups closures by day. Each main destination has one navigation entry, and the
 terminal bottom area only contains the selected-trade panel.
 
@@ -366,3 +366,7 @@ On phones the journal history uses trade cards instead of a horizontal table;
 desktop keeps the full table. Filters include symbol suggestions in one place.
 The automatic journal refresh preference is saved on the device and restored
 across page navigation; background tabs remain paused.
+
+The dashboard distinguishes closed results from the total realized result,
+including partial exits and recorded fees. Bot cards show closed results and
+a quantity-remaining meter (not a profit or capital-allocation percentage).
