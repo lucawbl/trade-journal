@@ -1,275 +1,39 @@
-"use client";
+import Link from "next/link";
+import { headers } from "next/headers";
 
-import { Suspense, useState } from "react";
-import { Archive, ArchiveRestore, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { AccountCreateForm } from "@/components/account-create-form";
-import { FilterBar } from "@/components/filter-bar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { postJson, useApi } from "@/lib/use-api";
-import { fmtMoney } from "@/lib/utils";
-import { MonetaryValue, MonetaryField } from "@/components/privacy";
+export const dynamic = "force-dynamic";
 
-interface AccountRow {
-  id: string;
-  name: string;
-  broker: string;
-  kind: "sync" | "import" | "manual";
-  currency: string;
-  initialBalance: number;
-  profitCalcMethod: "fifo" | "lifo" | "wavg";
-  autoSync: boolean;
-  lastSyncAt: string | null;
-  archivedAt: string | null;
-  connected: boolean;
-  snapshot: { equity: number; positions: unknown[] } | null;
+async function api(path: string) {
+  const h = await headers();
+  const host = h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  if (!host) return null;
+  try {
+    const r = await fetch(`${proto}://${host}${path}`, { cache: "no-store" });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
 }
+const n=(v:unknown,d=2)=>typeof v==="number"&&Number.isFinite(v)?v.toFixed(d):"—";
 
-export default function AccountsPage() {
-  return (
-    <Suspense>
-      <Accounts />
-    </Suspense>
-  );
-}
-
-function Accounts() {
-  const { data, refresh } = useApi<{ accounts: AccountRow[] }>("/api/accounts");
-  const [syncing, setSyncing] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-
-  const action = async <T = unknown,>(id: string, body: Record<string, unknown>) => {
-    const result = await postJson<T>(`/api/accounts/${id}/actions`, body);
-    refresh();
-    return result;
-  };
-
-  const sync = async (id: string) => {
-    setSyncing(id);
-    try {
-      const { sync: outcome } = await action<{
-        sync: { inserted: number; skipped: number; skippedReasons: string[] };
-      }>(id, { action: "sync" });
-      if (outcome.skipped > 0)
-        alert(
-          `Sync finished with ${outcome.inserted} new fills. ${outcome.skipped} broker record(s) were skipped: ${outcome.skippedReasons.join(" ")}`,
-        );
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Sync failed");
-    } finally {
-      setSyncing(null);
-    }
-  };
-
-  return (
-    <div>
-      <FilterBar
-        title="Accounts"
-        actions={
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus />
-            New account
-          </Button>
-        }
-      />
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>New account</DialogTitle>
-            <DialogDescription>
-              Create an account for manual trades or file imports.
-            </DialogDescription>
-          </DialogHeader>
-          <AccountCreateForm
-            showTitle={false}
-            onCreated={() => {
-              refresh();
-              setCreating(false);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
-      <div className="grid gap-3 p-4 md:grid-cols-2">
-        {data?.accounts.length === 0 && (
-          <p className="col-span-full py-16 text-center text-sm text-muted-foreground">
-            No accounts yet — use New account to create your first one.
-          </p>
-        )}
-        {data?.accounts.map((account) => (
-          <Card key={account.id} className={account.archivedAt ? "opacity-60" : undefined}>
-            <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle className="min-w-0 flex-1 text-base font-semibold normal-case tracking-normal text-foreground">
-                <span className="block break-words">{account.name}</span>
-                <Badge variant="secondary" className="mt-1.5 mr-2">
-                  {account.kind}
-                </Badge>
-                {account.broker && (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {account.broker}
-                  </span>
-                )}
-              </CardTitle>
-              <div className="ml-auto flex shrink-0 items-center gap-1">
-                {account.kind === "sync" && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={syncing === account.id}
-                    onClick={() => void sync(account.id)}
-                    title="Sync now"
-                  >
-                    <RefreshCw className={syncing === account.id ? "animate-spin" : undefined} />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  title={account.archivedAt ? "Unarchive" : "Archive"}
-                  onClick={() =>
-                    void action(account.id, {
-                      action: account.archivedAt ? "unarchive" : "archive",
-                    })
-                  }
-                >
-                  {account.archivedAt ? <ArchiveRestore /> : <Archive />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  title="Delete account"
-                  onClick={async () => {
-                    if (
-                      confirm(`Delete "${account.name}" and ALL its trades? This cannot be undone.`)
-                    ) {
-                      await postJson(`/api/accounts/${account.id}`, undefined, "DELETE");
-                      refresh();
-                    }
-                  }}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {account.snapshot && (
-                <div className="text-sm">
-                  Broker equity:{" "}
-                  <span className="tnum font-medium">
-                    <MonetaryValue>{fmtMoney(account.snapshot.equity)}</MonetaryValue>
-                  </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {account.snapshot.positions.length} open positions · synced{" "}
-                    {account.lastSyncAt?.slice(0, 16).replace("T", " ")}
-                  </span>
-                </div>
-              )}
-              <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2">
-                <div className="min-w-0">
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Initial balance (anchors drawdown %)
-                  </label>
-                  <MonetaryField>
-                    <Input
-                      defaultValue={account.initialBalance || ""}
-                      placeholder="0"
-                      inputMode="decimal"
-                      onBlur={async (event) => {
-                        const value = Number(event.target.value || 0);
-                        if (value !== account.initialBalance) {
-                          await postJson(
-                            `/api/accounts/${account.id}`,
-                            { initialBalance: value },
-                            "PATCH",
-                          );
-                          refresh();
-                        }
-                      }}
-                    />
-                  </MonetaryField>
-                </div>
-                <div className="min-w-0">
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Profit calculation
-                  </label>
-                  <Select
-                    value={account.profitCalcMethod}
-                    onValueChange={async (value) => {
-                      await postJson(
-                        `/api/accounts/${account.id}`,
-                        { profitCalcMethod: value },
-                        "PATCH",
-                      );
-                      refresh();
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fifo">FIFO</SelectItem>
-                      <SelectItem value="lifo">LIFO</SelectItem>
-                      <SelectItem value="wavg">Weighted average</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    if (confirm(`Clear ALL trades from "${account.name}"? The account stays.`)) {
-                      await action(account.id, { action: "clear" });
-                    }
-                  }}
-                >
-                  Clear trades
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    const others = data.accounts.filter((candidate) => candidate.id !== account.id);
-                    if (others.length === 0) return alert("No other account to transfer into.");
-                    const target = prompt(
-                      `Transfer all data into which account?\n${others.map((candidate, index) => `${index + 1}. ${candidate.name}`).join("\n")}\n\nEnter a number:`,
-                    );
-                    const chosen = others[Number(target) - 1];
-                    if (chosen) {
-                      try {
-                        await action(account.id, { action: "transfer", toAccountId: chosen.id });
-                      } catch (error) {
-                        alert(error instanceof Error ? error.message : "Transfer failed");
-                      }
-                    }
-                  }}
-                >
-                  Transfer data
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
+export default async function AccountsPage() {
+  const data=await api("/api/accounts");
+  const rows=data?.accounts ?? [];
+  return <main className="min-h-screen bg-background p-6 text-foreground"><div className="mx-auto max-w-6xl">
+    <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+      <div><h1 className="text-2xl font-semibold">Accounts</h1><p className="text-sm text-muted-foreground">Bybit Demo · server-rendered</p></div>
+      <nav className="flex gap-4 text-sm"><Link href="/">Dashboard</Link><Link href="/trades">Trades</Link><Link href="/accounts">Accounts</Link></nav>
+    </header>
+    <section className="grid gap-4 md:grid-cols-2">
+      {rows.length?rows.map((a:any)=><article key={a.id} className="rounded-xl border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="font-semibold">{a.name}</h2><p className="text-sm text-muted-foreground">{a.broker || "Broker"} · {a.kind}</p></div><span className="text-xs text-muted-foreground">{a.connected?"Connected":"Stored"}</span></div>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div><p className="text-xs text-muted-foreground">Currency</p><p>{a.currency}</p></div>
+          <div><p className="text-xs text-muted-foreground">Initial balance</p><p>{n(a.initialBalance)} {a.currency}</p></div>
+          <div><p className="text-xs text-muted-foreground">Broker equity</p><p>{a.snapshot?n(a.snapshot.equity)+" "+a.currency:"—"}</p></div>
+          <div><p className="text-xs text-muted-foreground">Open positions</p><p>{a.snapshot?.positions?.length ?? 0}</p></div>
+        </div>
+        {a.lastSyncAt&&<p className="mt-4 text-xs text-muted-foreground">Last sync: {a.lastSyncAt.slice(0,16).replace("T"," ")}</p>}
+      </article>):<p className="text-sm text-muted-foreground">No account found.</p>}
+    </section>
+  </div></main>;
 }
