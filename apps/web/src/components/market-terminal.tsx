@@ -36,7 +36,14 @@ import { useLiveMarket } from "@/hooks/use-live-market";
 import { LIVE_SYMBOLS, type LiveSymbol, type LiveSnapshot } from "@/lib/live-market";
 import type { Resolution } from "@/lib/market-data";
 import { number, priceNumber, timestamp } from "@/lib/journal-format";
-import { testWma, type Drawing, type DrawingTool } from "@/lib/terminal-indicators";
+import {
+  testWma,
+  INDICATOR_CATALOG,
+  NO_INDICATORS,
+  type IndicatorSelection,
+  type Drawing,
+  type DrawingTool,
+} from "@/lib/terminal-indicators";
 import type { TerminalTrade } from "@/lib/terminal-types";
 import type { TerminalChart } from "./terminal-canvas";
 import { tradePath } from "@/lib/trade-links";
@@ -95,12 +102,9 @@ export function MarketTerminal({
   const [enabled, setEnabled] = useState(true),
     [line, setLine] = useState(false),
     [log, setLog] = useState(false);
-  const [indicators, setIndicators] = useState({
-    wma: true,
-    mfi: true,
-    aroon: true,
-    volume: false,
-  });
+  const [indicators, setIndicators] = useState<IndicatorSelection>({ ...NO_INDICATORS });
+  const [indicatorDialog, setIndicatorDialog] = useState(false);
+  const [indicatorSearch, setIndicatorSearch] = useState("");
   const [period, setPeriod] = useState(9),
     [tool, setTool] = useState<DrawingTool>("cursor");
   const [drawings, setDrawings] = useState<Record<string, Drawing[]>>({}),
@@ -158,6 +162,12 @@ export function MarketTerminal({
           setPeriod(saved.period);
         if (saved.indicators)
           setIndicators({
+            ...NO_INDICATORS,
+            rsi: !!saved.indicators.rsi,
+            ema: !!saved.indicators.ema,
+            sma: !!saved.indicators.sma,
+            macd: !!saved.indicators.macd,
+            bollinger: !!saved.indicators.bollinger,
             wma: !!saved.indicators.wma,
             mfi: !!saved.indicators.mfi,
             aroon: !!saved.indicators.aroon,
@@ -418,11 +428,10 @@ export function MarketTerminal({
         </button>
         <span className={s.divider} />
         <button
-          className={`${s.button} ${panel && tab === "indicators" ? s.active : ""}`}
-          onClick={() => {
-            setTab("indicators");
-            setPanel(true);
-          }}
+          aria-label="Ajouter des indicateurs"
+          title="Ajouter des indicateurs"
+          className={`${s.button} ${indicatorDialog ? s.active : ""}`}
+          onClick={() => setIndicatorDialog(true)}
         >
           <ChartNoAxesCombined size={18} />
           <span className={s.label}>Indicateurs</span>
@@ -630,7 +639,9 @@ export function MarketTerminal({
                 : "Cours historique"}
             </span>
             <span className={s.muted}>
-              WMA {period} {indicators.wma ? "" : "masquée"}
+              {INDICATOR_CATALOG.filter((item) => indicators[item.key])
+                .map((item) => (item.key === "wma" ? `WMA ${period}` : item.name))
+                .join(" · ")}
             </span>
             <span className={s.spacer} />
             <span className={s.muted} data-live-status>
@@ -762,7 +773,7 @@ export function MarketTerminal({
               {tab === "indicators" && (
                 <>
                   <div className={s.config}>
-                    {(["wma", "volume", "mfi", "aroon"] as const).map((key) => (
+                    {INDICATOR_CATALOG.map(({ key, name }) => (
                       <label key={key}>
                         <input
                           type="checkbox"
@@ -771,7 +782,7 @@ export function MarketTerminal({
                             setIndicators((i) => ({ ...i, [key]: e.target.checked }))
                           }
                         />
-                        {key === "volume" ? "Volume" : key.toUpperCase()}
+                        {name}
                       </label>
                     ))}
                     <label>
@@ -791,8 +802,14 @@ export function MarketTerminal({
                     </label>
                   </div>
                   <p className={`${s.muted} mt-5`}>
-                    WMA : moyenne pondérée des clôtures. MFI : flux monétaire sur 14 bougies. Aroon
-                    : haut / bas sur 14 périodes. Calculés sur les bougies Binance affichées.
+                    Les indicateurs sélectionnés se calculent sur les bougies affichées. Un panneau
+                    désactivé disparaît automatiquement.
+                    <button
+                      className={s.button}
+                      onClick={() => setIndicators({ ...NO_INDICATORS })}
+                    >
+                      Retirer tous les indicateurs
+                    </button>
                   </p>
                 </>
               )}
@@ -898,6 +915,62 @@ export function MarketTerminal({
           )}
         </section>
       </div>
+      <Dialog open={indicatorDialog} onOpenChange={setIndicatorDialog}>
+        <DialogContent container={host.current}>
+          <DialogHeader>
+            <DialogTitle>Indicateurs</DialogTitle>
+            <DialogDescription>
+              Ajoutez une moyenne sur le prix ou un oscillateur dans son propre panneau.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            aria-label="Rechercher un indicateur"
+            placeholder="Rechercher : RSI, EMA, MACD…"
+            value={indicatorSearch}
+            onChange={(e) => setIndicatorSearch(e.target.value)}
+            className="rounded border bg-background px-3 py-2 text-sm"
+          />
+          <div className="max-h-[48dvh] overflow-y-auto space-y-2">
+            {INDICATOR_CATALOG.filter((item) =>
+              `${item.name} ${item.description}`
+                .toLowerCase()
+                .includes(indicatorSearch.toLowerCase()),
+            ).map((item) => (
+              <label
+                key={item.key}
+                className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 hover:bg-secondary"
+              >
+                <input
+                  type="checkbox"
+                  checked={indicators[item.key]}
+                  onChange={(e) =>
+                    setIndicators((value) => ({ ...value, [item.key]: e.target.checked }))
+                  }
+                />
+                <span className="flex-1">
+                  <span className="block text-sm font-medium">{item.name}</span>
+                  <span className="block text-xs text-muted-foreground">{item.description}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">{item.group}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              className="rounded border px-3 py-2 text-sm"
+              onClick={() => setIndicators({ ...NO_INDICATORS })}
+            >
+              Retirer tous les indicateurs
+            </button>
+            <button
+              className="rounded bg-brand px-4 py-2 text-sm text-white"
+              onClick={() => setIndicatorDialog(false)}
+            >
+              Terminé
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={alertDialog} onOpenChange={setAlertDialog}>
         <DialogContent container={host.current}>
           <DialogHeader>

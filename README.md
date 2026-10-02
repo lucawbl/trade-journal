@@ -348,3 +348,12 @@ current-strategy SL/TP references. The WMA research panel is a separate long-onl
 simulation on loaded closed candles, filled at the following open with 0.1% fees
 per side; it does not reproduce a bot strategy. Pine Script and broker order
 submission are not implemented by this terminal.
+
+The compact Indicators button opens a searchable selector for RSI (Wilder 14),
+EMA/SMA (20), MACD (12/26/9), Bollinger (20, two population standard deviations),
+WMA, volume, MFI and Aroon. Disabled oscillator panes collapse completely and
+return their space to price candles while retaining the chart instance and zoom.
+New devices start with no indicators; existing device selections are preserved.
+Hover cards show only the pointed pane's values: a four-value OHLC summary on
+price or the relevant oscillator values. Multiple fills in one candle are counted
+in one row rather than expanded into a list.

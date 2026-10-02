@@ -85,3 +85,141 @@ export type Drawing = {
   points: [number, number][];
 };
 export type DrawingTool = "cursor" | Drawing["kind"];
+
+export const INDICATOR_CATALOG = [
+  { key: "rsi", name: "RSI", description: "Force relative · 14 périodes", group: "Oscillateurs" },
+  {
+    key: "ema",
+    name: "EMA",
+    description: "Moyenne exponentielle · 20 périodes",
+    group: "Sur le prix",
+  },
+  { key: "sma", name: "SMA", description: "Moyenne simple · 20 périodes", group: "Sur le prix" },
+  { key: "macd", name: "MACD", description: "Momentum · 12 / 26 / 9", group: "Oscillateurs" },
+  {
+    key: "bollinger",
+    name: "Bandes de Bollinger",
+    description: "Volatilité · 20 périodes, 2 écarts types",
+    group: "Sur le prix",
+  },
+  {
+    key: "wma",
+    name: "WMA",
+    description: "Moyenne pondérée · période réglable",
+    group: "Sur le prix",
+  },
+  { key: "volume", name: "Volume", description: "Volume échangé par bougie", group: "Sur le prix" },
+  { key: "mfi", name: "MFI", description: "Flux monétaire · 14 périodes", group: "Oscillateurs" },
+  { key: "aroon", name: "Aroon", description: "Tendance · 14 périodes", group: "Oscillateurs" },
+] as const;
+export type IndicatorKey = (typeof INDICATOR_CATALOG)[number]["key"];
+export type IndicatorSelection = Record<IndicatorKey, boolean>;
+export const NO_INDICATORS: IndicatorSelection = {
+  wma: false,
+  mfi: false,
+  aroon: false,
+  volume: false,
+  rsi: false,
+  ema: false,
+  sma: false,
+  macd: false,
+  bollinger: false,
+};
+export function sma(bars: MarketBar[], period = 20): (number | null)[] {
+  let sum = 0;
+  return bars.map((b, i) => {
+    sum += b.close;
+    if (i >= period) sum -= bars[i - period]!.close;
+    return i < period - 1 ? null : sum / period;
+  });
+}
+export function emaValues(values: (number | null)[], period: number): (number | null)[] {
+  let previous: number | null = null,
+    seed: number[] = [];
+  const alpha = 2 / (period + 1);
+  return values.map((value) => {
+    if (value == null) {
+      previous = null;
+      seed = [];
+      return null;
+    }
+    if (previous == null) {
+      seed.push(value);
+      if (seed.length < period) return null;
+      previous = seed.reduce((a, b) => a + b, 0) / period;
+    } else previous = alpha * value + (1 - alpha) * previous;
+    return previous;
+  });
+}
+export const ema = (bars: MarketBar[], period = 20) =>
+  emaValues(
+    bars.map((b) => b.close),
+    period,
+  );
+export function rsi(bars: MarketBar[], period = 14): (number | null)[] {
+  let gain = 0,
+    loss = 0;
+  return bars.map((bar, i) => {
+    if (i === 0) return null;
+    const change = bar.close - bars[i - 1]!.close;
+    if (i <= period) {
+      gain += Math.max(change, 0);
+      loss += Math.max(-change, 0);
+      if (i < period) return null;
+      gain /= period;
+      loss /= period;
+    } else {
+      gain = (gain * (period - 1) + Math.max(change, 0)) / period;
+      loss = (loss * (period - 1) + Math.max(-change, 0)) / period;
+    }
+    return gain + loss === 0 ? 50 : (100 * gain) / (gain + loss);
+  });
+}
+export function macd(bars: MarketBar[]) {
+  const fast = ema(bars, 12),
+    slow = ema(bars, 26);
+  const value = fast.map((v, i) => (v == null || slow[i] == null ? null : v - slow[i]!));
+  const signal = emaValues(value, 9);
+  return {
+    value,
+    signal,
+    histogram: value.map((v, i) => (v == null || signal[i] == null ? null : v - signal[i]!)),
+  };
+}
+export function bollinger(bars: MarketBar[], period = 20) {
+  const middle = sma(bars, period);
+  const deviation = middle.map((value, i) =>
+    value == null
+      ? null
+      : Math.sqrt(
+          bars.slice(i - period + 1, i + 1).reduce((sum, b) => sum + (b.close - value) ** 2, 0) /
+            period,
+        ),
+  );
+  return {
+    middle,
+    upper: middle.map((v, i) => (v == null ? null : v + 2 * deviation[i]!)),
+    lower: middle.map((v, i) => (v == null ? null : v - 2 * deviation[i]!)),
+  };
+}
+
+/** Stable axis slots with disabled panes collapsed; the price pane takes the free space. */
+export function indicatorLayout(selection: IndicatorSelection) {
+  const names = ["mfi", "aroon", "rsi", "macd"] as const;
+  const active = names.filter((key) => selection[key]);
+  const mainHeight = [90, 66, 48, 42, 38][active.length]!;
+  const gap = 3.5,
+    paneHeight = active.length ? (90 - mainHeight - gap * active.length) / active.length : 0;
+  return {
+    mainHeight,
+    active,
+    panes: names.map((key, index) => ({
+      key,
+      axis: index + 1,
+      enabled: selection[key],
+      top: selection[key] ? 6 + mainHeight + gap + active.indexOf(key) * (paneHeight + gap) : 0,
+      height: selection[key] ? paneHeight : 0,
+    })),
+    lastAxis: active.length ? names.indexOf(active.at(-1)!) + 1 : 0,
+  };
+}

@@ -28,7 +28,7 @@ export function EChart({
   className?: string;
   height?: number | string;
   preserveZoom?: boolean;
-  onReady?: (chart: echarts.ECharts) => void;
+  onReady?: (chart: echarts.ECharts) => void | (() => void);
 }) {
   const readyRef = useRef(onReady);
   readyRef.current = onReady;
@@ -43,6 +43,7 @@ export function EChart({
     if (!host) return;
     let frame = 0;
     let observer: ResizeObserver | undefined;
+    let readyCleanup: void | (() => void);
     let resume: ReturnType<typeof setTimeout> | undefined;
     const hold = () => {
       clearTimeout(resume);
@@ -71,7 +72,7 @@ export function EChart({
       chartRef.current = chart;
       initialized.current = false;
       applyRef.current();
-      readyRef.current?.(chart);
+      readyCleanup = readyRef.current?.(chart);
       let width = host.clientWidth,
         height = host.clientHeight;
       observer = new ResizeObserver(([entry]) => {
@@ -99,6 +100,7 @@ export function EChart({
       cancelAnimationFrame(start);
       observer?.disconnect();
       cancelAnimationFrame(frame);
+      readyCleanup?.();
       chartRef.current?.dispose();
       chartRef.current = null;
     };

@@ -5,7 +5,20 @@ import { CandlestickChart, ScatterChart } from "echarts/charts";
 import { DataZoomComponent, MarkLineComponent, GraphicComponent } from "echarts/components";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./charts/echart";
-import { wma, mfi, aroon, type Drawing, type DrawingTool } from "@/lib/terminal-indicators";
+import {
+  wma,
+  mfi,
+  aroon,
+  rsi,
+  ema,
+  sma,
+  macd,
+  bollinger,
+  indicatorLayout,
+  type IndicatorSelection,
+  type Drawing,
+  type DrawingTool,
+} from "@/lib/terminal-indicators";
 import type { MarketHistory } from "@/lib/market-data";
 import { RESOLUTIONS } from "@/lib/market-data";
 import { number, priceNumber, timestamp } from "@/lib/journal-format";
@@ -40,7 +53,7 @@ export function TerminalCanvas({
   history: MarketHistory;
   price: number;
   period: number;
-  indicators: { wma: boolean; mfi: boolean; aroon: boolean; volume: boolean };
+  indicators: IndicatorSelection;
   log: boolean;
   line: boolean;
   drawings: Drawing[];
@@ -62,6 +75,8 @@ export function TerminalCanvas({
       });
   }, [tool]);
   const bars = history.bars;
+  const hoverAxis = useRef(0);
+  const layout = indicatorLayout(indicators);
   const latest = useRef({ tool, bars, onDraw, onMeasure, onReady });
   latest.current = { tool, bars, onDraw, onMeasure, onReady };
   const first = useRef<[number, number] | null>(null);
@@ -73,6 +88,14 @@ export function TerminalCanvas({
   const ready = (chart: TerminalChart) => {
     instance.current = chart;
     latest.current.onReady(chart);
+    const hover = (event: MouseEvent) => {
+      const rect = chart.getDom().getBoundingClientRect();
+      hoverAxis.current =
+        [0, 1, 2, 3, 4].find((gridIndex) =>
+          chart.containPixel({ gridIndex }, [event.clientX - rect.left, event.clientY - rect.top]),
+        ) ?? 0;
+    };
+    chart.getDom().addEventListener("mousemove", hover, true);
     chart.getZr().on("click", (event) => {
       const state = latest.current;
       if (
@@ -104,6 +127,7 @@ export function TerminalCanvas({
         );
       }
     });
+    return () => chart.getDom().removeEventListener("mousemove", hover, true);
   };
   const times = bars.map((b) => timestamp(new Date(b.time).toISOString(), timeZone));
   const findIndex = (time: number) =>
@@ -141,16 +165,60 @@ export function TerminalCanvas({
     if (d.kind === "horizontal") drawingData.push([0, start[1]], [bars.length - 1, start[1]], null);
     else if (end && a >= 0 && b >= 0) drawingData.push([a, start[1]], [b, end![1]], null);
   });
-  const ar = aroon(bars);
+  const ar = aroon(bars),
+    mf = mfi(bars),
+    rs = rsi(bars),
+    mc = macd(bars),
+    bb = bollinger(bars);
+  const paneNames = ["Cours", "MFI 14", "Aroon 14", "RSI 14", "MACD 12 / 26 / 9"];
+  const tooltipHtml = (index: number) => {
+    const bar = bars[index];
+    if (!bar) return "";
+    const cell = (name: string, value: string) =>
+      `<div><span style="color:#8f9bad;font-size:11px">${name}</span><strong style="display:block;font-size:12px;font-weight:500">${value}</strong></div>`;
+    const format = (value: number | null | undefined) => (value == null ? "—" : number(value, 2));
+    let content = "";
+    if (hoverAxis.current === 1) content = cell("Flux monétaire", format(mf[index]));
+    else if (hoverAxis.current === 2)
+      content = cell("Haut", format(ar.up[index])) + cell("Bas", format(ar.down[index]));
+    else if (hoverAxis.current === 3) content = cell("Force relative", format(rs[index]));
+    else if (hoverAxis.current === 4)
+      content =
+        cell("MACD", priceNumber(mc.value[index])) +
+        cell("Signal", priceNumber(mc.signal[index])) +
+        cell("Histogramme", priceNumber(mc.histogram[index]));
+    else
+      content =
+        cell("Ouverture", marketPrice(bar.open)) +
+        cell("Clôture", marketPrice(bar.close)) +
+        cell("Plus haut", marketPrice(bar.high)) +
+        cell("Plus bas", marketPrice(bar.low));
+    const fills = events.filter(
+      (e) =>
+        Math.floor(e.time / RESOLUTIONS[history.resolution]) * RESOLUTIONS[history.resolution] ===
+        bar.time,
+    );
+    const count = (kind: "entry" | "exit") => fills.filter((e) => e.kind === kind).length;
+    const tradeRow =
+      hoverAxis.current === 0 && fills.length
+        ? `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #343c4c;color:#a6b4c8;font-size:11px">${count("entry")} entrée(s) · ${count("exit")} sortie(s)</div>`
+        : "";
+    return `<div style="width:210px;max-width:100%;font-variant-numeric:tabular-nums"><div style="font-weight:600;margin-bottom:2px">${paneNames[hoverAxis.current] ?? "Cours"}</div><div style="color:#8f9bad;font-size:11px;margin-bottom:8px">${times[index]}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">${content}</div>${tradeRow}</div>`;
+  };
   const label = { color: "#858b99", fontSize: 11, hideOverlap: true };
-  const axes = [0, 1, 2].map((gridIndex) => ({
+  const axes = [0, 1, 2, 3, 4].map((gridIndex) => ({
     type: "category" as const,
     gridIndex,
+    show: gridIndex === 0 || layout.panes[gridIndex - 1]?.enabled,
+    axisPointer: {
+      show: gridIndex === 0 || !!layout.panes[gridIndex - 1]?.enabled,
+      label: { show: false },
+    },
     data: times,
     boundaryGap: true,
     axisLabel: {
       ...label,
-      show: gridIndex === 2,
+      show: gridIndex === layout.lastAxis,
       formatter: (v: string) =>
         history.resolution === "1d" ? v.slice(0, 5) : (v.split(" · ")[1] ?? v),
     },
@@ -162,26 +230,39 @@ export function TerminalCanvas({
     animation: false,
     backgroundColor: "#06080b",
     grid: [
-      { left: 12, right: 90, top: "6%", height: "46%" },
-      { left: 12, right: 90, top: "57%", height: "18%" },
-      {
+      { left: 12, right: 90, top: "6%", height: `${layout.mainHeight}%` },
+      ...layout.panes.map((pane) => ({
         left: 12,
         right: 90,
-        top: "79%",
-        bottom: 27,
-        show: true,
-        backgroundColor: "#0a1022",
+        top: `${pane.top}%`,
+        height: `${pane.height}%`,
+        show: pane.enabled,
+        backgroundColor: pane.key === "aroon" ? "#0a1022" : "#06080b",
         borderWidth: 0,
-      },
+      })),
     ],
     tooltip: {
+      show: tool === "cursor",
       trigger: "axis",
+      triggerOn: "mousemove|click|mousewheel",
       confine: true,
       backgroundColor: "#161b24",
       borderColor: "#343c4c",
       textStyle: { color: "#d1d5db", fontSize: 12 },
-      axisPointer: { type: "cross", link: [{ xAxisIndex: "all" }] },
-      valueFormatter: (v) => (typeof v === "number" ? marketPrice(v) : String(v)),
+      axisPointer: { type: "line", axis: "x", label: { show: false } },
+      extraCssText:
+        "max-width:235px;white-space:normal;pointer-events:none;box-shadow:0 4px 20px #0008;",
+      formatter: (params) => {
+        const list = Array.isArray(params) ? params : [params];
+        const index = list.find((p) => typeof p.dataIndex === "number")?.dataIndex;
+        return typeof index === "number" ? tooltipHtml(index) : "";
+      },
+      position: (point, _params, _dom, _rect, size) => [
+        point[0] > size.viewSize[0] / 2
+          ? 8
+          : Math.max(8, size.viewSize[0] - size.contentSize[0] - 8),
+        8,
+      ],
     },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     xAxis: axes,
@@ -195,14 +276,16 @@ export function TerminalCanvas({
         axisLabel: { ...label, formatter: marketPrice },
         splitLine: { lineStyle: { color: "#14171d" } },
       },
-      ...[1, 2].map((gridIndex) => ({
+      ...[1, 2, 3, 4].map((gridIndex) => ({
         type: "value" as const,
         gridIndex,
-        min: 0,
-        max: 100,
-        interval: 50,
+        show: !!layout.panes[gridIndex - 1]?.enabled,
+        axisPointer: { label: { show: false } },
+        min: gridIndex === 4 ? undefined : 0,
+        max: gridIndex === 4 ? undefined : 100,
+        interval: gridIndex === 4 ? undefined : 50,
         position: "right" as const,
-        axisLabel: label,
+        axisLabel: gridIndex === 4 ? { ...label, formatter: marketPrice } : label,
         splitLine: { lineStyle: { color: "#14171d" } },
       })),
       {
@@ -216,7 +299,7 @@ export function TerminalCanvas({
     dataZoom: [
       {
         type: "inside",
-        xAxisIndex: [0, 1, 2],
+        xAxisIndex: [0, 1, 2, 3, 4],
         start: 60,
         end: 100,
         filterMode: "none",
@@ -227,6 +310,7 @@ export function TerminalCanvas({
     ],
     graphic: [
       {
+        id: "symbol-title",
         type: "text",
         left: 14,
         top: 10,
@@ -236,26 +320,14 @@ export function TerminalCanvas({
           fontSize: 13,
         },
       },
-      {
-        type: "text",
+      ...layout.panes.map((pane) => ({
+        id: `title-${pane.key}`,
+        type: "text" as const,
         left: 14,
-        top: "54%",
-        style: {
-          text: `MFI 14${indicators.mfi ? "" : " · masqué"}`,
-          fill: "#858b99",
-          fontSize: 12,
-        },
-      },
-      {
-        type: "text",
-        left: 14,
-        top: "76%",
-        style: {
-          text: `Aroon 14${indicators.aroon ? "" : " · masqué"}`,
-          fill: "#858b99",
-          fontSize: 12,
-        },
-      },
+        top: `${pane.enabled ? pane.top - 2.5 : 0}%`,
+        invisible: !pane.enabled,
+        style: { text: paneNames[pane.axis], fill: "#858b99", fontSize: 12 },
+      })),
     ],
     series: [
       {
@@ -268,18 +340,6 @@ export function TerminalCanvas({
           color0: "#f23645",
           borderColor: "#089981",
           borderColor0: "#f23645",
-        },
-        markLine: {
-          silent: true,
-          symbol: "none",
-          data: [{ yAxis: price }],
-          lineStyle: { color: "#089981", type: "dotted", width: 1 },
-          label: {
-            formatter: marketPrice(price),
-            color: "#fff",
-            backgroundColor: "#089981",
-            padding: [4, 5],
-          },
         },
       },
       {
@@ -302,7 +362,7 @@ export function TerminalCanvas({
         id: "volume",
         name: "Volume",
         type: "bar",
-        yAxisIndex: 3,
+        yAxisIndex: 5,
         data: indicators.volume
           ? bars.map((b) => ({
               value: b.volume,
@@ -317,7 +377,7 @@ export function TerminalCanvas({
         type: "line",
         xAxisIndex: 1,
         yAxisIndex: 1,
-        data: indicators.mfi ? mfi(bars) : [],
+        data: indicators.mfi ? mf : [],
         showSymbol: false,
         lineStyle: { color: "#2962ff", width: 1.5 },
       },
@@ -340,6 +400,84 @@ export function TerminalCanvas({
         data: indicators.aroon ? ar.down : [],
         showSymbol: false,
         lineStyle: { color: "#2962ff", width: 1.5 },
+      },
+      {
+        id: "ema",
+        name: "EMA 20",
+        type: "line",
+        data: indicators.ema ? ema(bars) : [],
+        showSymbol: false,
+        lineStyle: { color: "#f59e0b", width: 2 },
+      },
+      {
+        id: "sma",
+        name: "SMA 20",
+        type: "line",
+        data: indicators.sma ? sma(bars) : [],
+        showSymbol: false,
+        lineStyle: { color: "#c084fc", width: 1.5 },
+      },
+      ...(["upper", "middle", "lower"] as const).map((key) => ({
+        id: `bollinger-${key}`,
+        name: `Bollinger ${key}`,
+        type: "line" as const,
+        data: indicators.bollinger ? bb[key] : [],
+        showSymbol: false,
+        lineStyle: {
+          color: "#22d3ee",
+          width: 1,
+          type: key === "middle" ? ("dashed" as const) : ("solid" as const),
+        },
+      })),
+      {
+        id: "rsi",
+        name: "RSI 14",
+        type: "line",
+        xAxisIndex: 3,
+        yAxisIndex: 3,
+        data: indicators.rsi ? rs : [],
+        showSymbol: false,
+        lineStyle: { color: "#a78bfa", width: 1.5 },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          label: { show: false },
+          lineStyle: { color: "#66547e", type: "dashed" },
+          data: indicators.rsi ? [{ yAxis: 30 }, { yAxis: 70 }] : [],
+        },
+      },
+      {
+        id: "macd",
+        name: "MACD",
+        type: "line",
+        xAxisIndex: 4,
+        yAxisIndex: 4,
+        data: indicators.macd ? mc.value : [],
+        showSymbol: false,
+        lineStyle: { color: "#60a5fa", width: 1.5 },
+      },
+      {
+        id: "macd-signal",
+        name: "Signal MACD",
+        type: "line",
+        xAxisIndex: 4,
+        yAxisIndex: 4,
+        data: indicators.macd ? mc.signal : [],
+        showSymbol: false,
+        lineStyle: { color: "#fb923c", width: 1.5 },
+      },
+      {
+        id: "macd-histogram",
+        name: "Histogramme MACD",
+        type: "bar",
+        xAxisIndex: 4,
+        yAxisIndex: 4,
+        data: indicators.macd
+          ? mc.histogram.map((v) => ({
+              value: v,
+              itemStyle: { color: v != null && v >= 0 ? "#08998188" : "#f2364588" },
+            }))
+          : [],
       },
       {
         id: "entries",
@@ -410,13 +548,25 @@ export function TerminalCanvas({
       },
     ],
   };
+  // Reference lines and moving averages must not sprout highlights in every linked pane.
+  if (Array.isArray(option.series))
+    option.series = option.series.map((series) =>
+      series.type === "line" && series.id !== "drawings"
+        ? { ...series, emphasis: { disabled: true } }
+        : series,
+    );
   return (
     <div
       role="img"
-      aria-label={`Bougies ${history.symbol}, WMA, MFI et Aroon, achats, ventes et niveaux SL/TP`}
+      aria-label={`Graphique ${history.symbol}, achats, ventes et indicateurs sélectionnés`}
       style={{ cursor: tool === "cursor" ? "crosshair" : "copy" }}
     >
-      <EChart option={option} height={height} preserveZoom onReady={ready} />
+      <EChart
+        option={option}
+        height={layout.active.length >= 3 ? "clamp(740px, calc(100dvh - 190px), 1500px)" : height}
+        preserveZoom
+        onReady={ready}
+      />
     </div>
   );
 }
