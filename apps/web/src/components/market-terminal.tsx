@@ -1,0 +1,977 @@
+"use client";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Menu,
+  CandlestickChart,
+  ChartLine,
+  ChartNoAxesCombined,
+  BellPlus,
+  Rewind,
+  Play,
+  Pause,
+  StepForward,
+  Undo2,
+  Redo2,
+  Maximize,
+  Minimize,
+  Camera,
+  Crosshair,
+  Minus,
+  Spline,
+  Ruler,
+  Trash2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Settings2,
+  ChevronDown,
+  X,
+  Save,
+  Download,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { useLiveMarket } from "@/hooks/use-live-market";
+import { LIVE_SYMBOLS, type LiveSymbol, type LiveSnapshot } from "@/lib/live-market";
+import type { Resolution } from "@/lib/market-data";
+import { number, priceNumber, timestamp } from "@/lib/journal-format";
+import { testWma, type Drawing, type DrawingTool } from "@/lib/terminal-indicators";
+import type { TerminalTrade } from "@/lib/terminal-types";
+import type { TerminalChart } from "./terminal-canvas";
+import { tradePath } from "@/lib/trade-links";
+import s from "./market-terminal.module.css";
+const Canvas = dynamic(() => import("./terminal-canvas").then((m) => m.TerminalCanvas), {
+  ssr: false,
+  loading: () => <p className="p-8">Préparation du graphique…</p>,
+});
+type Tab = "scanner" | "indicators" | "strategy" | "trades";
+type Alert = {
+  id: string;
+  symbol: LiveSymbol;
+  price: number;
+  direction: "above" | "below";
+  triggered: boolean;
+};
+const EMPTY: TerminalTrade["events"] = [];
+const NO_LEVELS: TerminalTrade["levels"] = [];
+function WatchRow({
+  symbol,
+  onSelect,
+}: {
+  symbol: LiveSymbol;
+  onSelect: (value: LiveSymbol) => void;
+}) {
+  const { snapshot, status } = useLiveMarket(symbol, "1m", true);
+  return (
+    <tr>
+      <td>
+        <button className={s.button} onClick={() => onSelect(symbol)}>
+          {symbol.replace("USDT", " / USDT")}
+        </button>
+      </td>
+      <td>{snapshot ? priceNumber(snapshot.price) : "—"}</td>
+      <td className={snapshot && snapshot.changePct < 0 ? s.down : s.up}>
+        {snapshot ? `${number(snapshot.changePct, 2)} %` : "—"}
+      </td>
+      <td>{status}</td>
+    </tr>
+  );
+}
+export function MarketTerminal({
+  initialSymbol,
+  initialResolution,
+  trades,
+  timeZone,
+}: {
+  initialSymbol: LiveSymbol;
+  initialResolution: Resolution;
+  trades: TerminalTrade[];
+  timeZone: string;
+}) {
+  const router = useRouter();
+  const [symbol, setSymbol] = useState(initialSymbol),
+    [resolution, setResolution] = useState(initialResolution);
+  const [enabled, setEnabled] = useState(true),
+    [line, setLine] = useState(false),
+    [log, setLog] = useState(false);
+  const [indicators, setIndicators] = useState({
+    wma: true,
+    mfi: true,
+    aroon: true,
+    volume: false,
+  });
+  const [period, setPeriod] = useState(9),
+    [tool, setTool] = useState<DrawingTool>("cursor");
+  const [drawings, setDrawings] = useState<Record<string, Drawing[]>>({}),
+    [redo, setRedo] = useState<Drawing[]>([]);
+  const [loaded, setLoaded] = useState(false),
+    [nav, setNav] = useState(false),
+    [fullscreen, setFullscreen] = useState(false);
+  const [tab, setTab] = useState<Tab>("trades"),
+    [panel, setPanel] = useState(false),
+    [notice, setNotice] = useState("");
+  const [alertDialog, setAlertDialog] = useState(false),
+    [alertPrice, setAlertPrice] = useState(""),
+    [direction, setDirection] = useState<"above" | "below">("above"),
+    [alerts, setAlerts] = useState<Alert[]>([]);
+  const [replay, setReplay] = useState<LiveSnapshot | null>(null),
+    [replayIndex, setReplayIndex] = useState(0),
+    [playing, setPlaying] = useState(false);
+  const [selectedTrade, setSelectedTrade] = useState("");
+  const chart = useRef<TerminalChart | null>(null),
+    host = useRef<HTMLDivElement>(null);
+  const { snapshot, status, error, receivedAt } = useLiveMarket(
+    symbol,
+    resolution,
+    enabled && !replay,
+  );
+  const symbolTrades = trades.filter((t) => t.symbol === symbol);
+  const selected =
+    symbolTrades.find((t) => t.key === selectedTrade) ??
+    symbolTrades.find((t) => t.status === "open") ??
+    symbolTrades[0];
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("market-terminal-v1") ?? "null");
+      if (saved) {
+        if (saved.drawings && typeof saved.drawings === "object") {
+          const valid: Record<string, Drawing[]> = {};
+          for (const pair of LIVE_SYMBOLS)
+            valid[pair] = Array.isArray(saved.drawings[pair])
+              ? saved.drawings[pair]
+                  .filter(
+                    (d: Drawing) =>
+                      ["trend", "horizontal", "measure"].includes(d.kind) &&
+                      Array.isArray(d.points) &&
+                      d.points.length > 0 &&
+                      d.points.length <= 2 &&
+                      d.points.every(
+                        (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite),
+                      ),
+                  )
+                  .slice(-100)
+              : [];
+          setDrawings(valid);
+        }
+        if (Number.isInteger(saved.period) && saved.period >= 3 && saved.period <= 100)
+          setPeriod(saved.period);
+        if (saved.indicators)
+          setIndicators({
+            wma: !!saved.indicators.wma,
+            mfi: !!saved.indicators.mfi,
+            aroon: !!saved.indicators.aroon,
+            volume: !!saved.indicators.volume,
+          });
+      }
+    } catch {
+      /* Use defaults if device preferences are unavailable. */
+    }
+    setLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (loaded) {
+      try {
+        localStorage.setItem(
+          "market-terminal-v1",
+          JSON.stringify({ drawings, period, indicators }),
+        );
+      } catch {}
+    }
+  }, [drawings, period, indicators, loaded]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("resolution", resolution);
+    window.history.replaceState(window.history.state, "", url);
+    chart.current = null;
+    setRedo([]);
+    setSelectedTrade("");
+    setReplay(null);
+    setPlaying(false);
+    setTool("cursor");
+  }, [symbol, resolution]);
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement === host.current);
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (!document.fullscreenElement) setFullscreen(false);
+        setTool("cursor");
+        setNotice("");
+      }
+    };
+    document.addEventListener("fullscreenchange", changed);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("fullscreenchange", changed);
+      document.removeEventListener("keydown", escape);
+    };
+  }, []);
+  useEffect(() => {
+    if (!playing || !replay) return;
+    const timer = setInterval(
+      () =>
+        setReplayIndex((i) => {
+          if (i >= replay.bars.length) {
+            setPlaying(false);
+            return i;
+          }
+          return i + 1;
+        }),
+      700,
+    );
+    return () => clearInterval(timer);
+  }, [playing, replay]);
+  useEffect(() => {
+    if (!snapshot || !enabled || replay || snapshot.symbol !== symbol) return;
+    setAlerts((previous) =>
+      previous.map((a) =>
+        a.symbol === symbol &&
+        !a.triggered &&
+        (a.direction === "above" ? snapshot.price >= a.price : snapshot.price <= a.price)
+          ? { ...a, triggered: true }
+          : a,
+      ),
+    );
+  }, [snapshot, symbol, enabled, replay]);
+  const history = useMemo(
+    () =>
+      replay && replay.symbol === symbol && replay.resolution === resolution
+        ? {
+            ...replay,
+            bars: replay.bars.slice(0, replayIndex),
+            price: replay.bars[Math.max(0, replayIndex - 1)]?.close ?? replay.price,
+          }
+        : snapshot?.symbol === symbol && snapshot.resolution === resolution
+          ? snapshot
+          : null,
+    [snapshot, replay, replayIndex, symbol, resolution],
+  );
+  const research = useMemo(
+    () => testWma((history?.bars ?? []).slice(0, -1), period),
+    [history?.bars, period],
+  );
+  const triggered = alerts.filter((a) => a.triggered);
+  const toggleFullscreen = async () => {
+    if (fullscreen) {
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      setFullscreen(false);
+    } else {
+      setFullscreen(true);
+      try {
+        await host.current?.requestFullscreen?.();
+      } catch {}
+    }
+  };
+  const getChart = () => (chart.current && !chart.current.isDisposed() ? chart.current : null);
+  const zoom = (delta: number) => {
+    const c = getChart();
+    if (!c) return;
+    const z = (c.getOption().dataZoom as { start: number; end: number }[])[0];
+    if (!z) return;
+    const center = (z.start + z.end) / 2,
+      span = Math.max(3, Math.min(100, (z.end - z.start) * delta));
+    c.dispatchAction({
+      type: "dataZoom",
+      start: Math.max(0, center - span / 2),
+      end: Math.min(100, center + span / 2),
+    });
+  };
+  const range = (start: number) =>
+    getChart()?.dispatchAction({ type: "dataZoom", start, end: 100 });
+  const addDrawing = (drawing: Drawing) => {
+    setDrawings((d) => ({ ...d, [symbol]: [...(d[symbol] ?? []), drawing].slice(-100) }));
+    setRedo([]);
+  };
+  const undo = () => {
+    const last = drawings[symbol]?.at(-1);
+    if (last) {
+      setRedo((r) => [...r, last]);
+      setDrawings((d) => ({ ...d, [symbol]: (d[symbol] ?? []).slice(0, -1) }));
+    }
+  };
+  const redoDrawing = () => {
+    const last = redo.at(-1);
+    if (last) {
+      setDrawings((d) => ({ ...d, [symbol]: [...(d[symbol] ?? []), last] }));
+      setRedo((r) => r.slice(0, -1));
+    }
+  };
+  const screenshot = () => {
+    const c = getChart();
+    if (!c) return;
+    const a = document.createElement("a");
+    a.href = c.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#06080b" });
+    a.download = `${symbol}-${resolution}.png`;
+    a.click();
+  };
+  const exportBars = () => {
+    if (!history) return;
+    const blob = new Blob(
+      [
+        "time,open,high,low,close,volume\n" +
+          history.bars
+            .map((b) =>
+              [new Date(b.time).toISOString(), b.open, b.high, b.low, b.close, b.volume].join(","),
+            )
+            .join("\n"),
+      ],
+      { type: "text/csv" },
+    );
+    const url = URL.createObjectURL(blob),
+      a = document.createElement("a");
+    a.href = url;
+    a.download = `${symbol}-${resolution}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const startReplay = () => {
+    if (replay) {
+      setReplay(null);
+      setPlaying(false);
+      return;
+    }
+    if (!snapshot) return;
+    const frozen = { ...snapshot, bars: snapshot.bars.slice(0, -1) };
+    setReplay(frozen);
+    setReplayIndex(Math.max(15, frozen.bars.length - 60));
+    setNotice("Replay sur les bougies chargées. Aucune opération envoyée au bot.");
+  };
+  const toolButton = (value: DrawingTool, label: string, Icon: typeof Crosshair) => (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={tool === value}
+      className={`${s.button} ${tool === value ? s.active : ""}`}
+      onClick={() => {
+        setTool(value);
+        setNotice(
+          value === "cursor"
+            ? ""
+            : value === "horizontal"
+              ? "Cliquez sur le graphique pour poser un niveau."
+              : "Cliquez sur deux points du graphique.",
+        );
+      }}
+    >
+      <Icon size={19} />
+    </button>
+  );
+  const chartHeight = panel
+    ? "clamp(430px, calc(100dvh - 365px), 1200px)"
+    : "clamp(470px, calc(100dvh - 190px), 1500px)";
+  return (
+    <div
+      ref={host}
+      className={s.terminal}
+      style={fullscreen ? { position: "fixed", inset: 0, zIndex: 50, overflow: "auto" } : undefined}
+    >
+      <a href="#market-chart" className="sr-only focus:not-sr-only">
+        Aller au graphique
+      </a>
+      <div className={s.top}>
+        <a href="/" className={s.brand}>
+          TJ <span className={s.muted}>/</span> Terminal
+        </a>
+        <span className={s.muted}>
+          {symbol.replace("USDT", "")} · {resolution}
+        </span>
+        <span className={s.badge}>Binance Spot · Bots démo / testnet</span>
+      </div>
+      <header className={s.toolbar}>
+        <button
+          className={s.button}
+          aria-label="Navigation du journal"
+          aria-expanded={nav}
+          onClick={() => setNav((v) => !v)}
+        >
+          <Menu size={19} />
+        </button>
+        <select
+          aria-label="Crypto en direct"
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value as LiveSymbol)}
+        >
+          {LIVE_SYMBOLS.map((v) => (
+            <option key={v} value={v}>
+              {v.replace("USDT", " / USDT")}
+            </option>
+          ))}
+        </select>
+        <span className={s.divider} />
+        <select
+          aria-label="Unité de temps en direct"
+          value={resolution}
+          onChange={(e) => setResolution(e.target.value as Resolution)}
+        >
+          {(["1m", "5m", "15m", "1h", "1d"] as const).map((v) => (
+            <option key={v}>{v}</option>
+          ))}
+        </select>
+        <button
+          className={s.button}
+          aria-label={line ? "Afficher les bougies" : "Afficher la courbe"}
+          aria-pressed={line}
+          onClick={() => setLine((v) => !v)}
+        >
+          {line ? <ChartLine size={18} /> : <CandlestickChart size={18} />}
+        </button>
+        <span className={s.divider} />
+        <button
+          className={`${s.button} ${panel && tab === "indicators" ? s.active : ""}`}
+          onClick={() => {
+            setTab("indicators");
+            setPanel(true);
+          }}
+        >
+          <ChartNoAxesCombined size={18} />
+          <span className={s.label}>Indicateurs</span>
+        </button>
+        <button
+          className={s.button}
+          aria-label="Créer une alerte de prix"
+          onClick={() => {
+            setAlertPrice(snapshot ? String(snapshot.price) : "");
+            setAlertDialog(true);
+          }}
+        >
+          <BellPlus size={18} />
+          <span className={s.label}>Alerte</span>
+        </button>
+        <button
+          className={`${s.button} ${replay ? s.active : ""}`}
+          aria-label="Replay des bougies"
+          aria-pressed={!!replay}
+          onClick={startReplay}
+        >
+          <Rewind size={18} />
+          <span className={s.label}>Replay</span>
+        </button>
+        <span className={s.divider} />
+        <button
+          className={s.button}
+          aria-label="Annuler le dernier tracé"
+          onClick={undo}
+          disabled={!drawings[symbol]?.length}
+        >
+          <Undo2 size={17} />
+        </button>
+        <button
+          className={s.button}
+          aria-label="Rétablir le tracé"
+          onClick={redoDrawing}
+          disabled={!redo.length}
+        >
+          <Redo2 size={17} />
+        </button>
+        <span className={s.spacer} />
+        <button
+          className={s.button}
+          aria-label="Paramètres des indicateurs"
+          onClick={() => {
+            setTab("indicators");
+            setPanel(true);
+          }}
+        >
+          <Settings2 size={18} />
+        </button>
+        <button
+          className={s.button}
+          aria-label={fullscreen ? "Quitter le plein écran" : "Plein écran"}
+          onClick={toggleFullscreen}
+        >
+          {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+        </button>
+        <button
+          className={s.button}
+          aria-label="Télécharger le graphique en PNG"
+          onClick={screenshot}
+        >
+          <Camera size={18} />
+        </button>
+        <button
+          className={`${s.button} ${s.primary}`}
+          aria-label="Enregistrer la disposition"
+          onClick={() =>
+            setNotice("Disposition et tracés enregistrés automatiquement sur cet appareil.")
+          }
+        >
+          <Save size={15} />
+          <span className={s.label}>Enregistré</span>
+        </button>
+      </header>
+      {nav && (
+        <nav className={s.nav} aria-label="Navigation principale">
+          {[
+            ["/", "Dashboard"],
+            ["/market", "Marché"],
+            ["/trades", "Trades"],
+            ["/accounts", "Comptes"],
+            ["/reports", "Rapports"],
+            ["/calendar", "Calendrier"],
+          ].map(([href, label]) => (
+            <a key={href} href={href}>
+              {label}
+            </a>
+          ))}
+        </nav>
+      )}
+      {triggered.length > 0 && (
+        <div role="alert" className={s.notice}>
+          {triggered.map((a) => (
+            <span key={a.id}>
+              Alerte {a.symbol} : {a.direction === "above" ? "au-dessus de" : "en dessous de"}{" "}
+              {priceNumber(a.price)} USDT{" "}
+              <button
+                className={s.button}
+                aria-label="Fermer l’alerte déclenchée"
+                onClick={() => setAlerts((v) => v.filter((x) => x.id !== a.id))}
+              >
+                <X size={13} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {notice && (
+        <div role="status" className={s.notice}>
+          {notice}
+          <button className={s.button} aria-label="Fermer le message" onClick={() => setNotice("")}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {error && (
+        <div role="alert" className={s.notice}>
+          {error}
+        </div>
+      )}
+      {replay && (
+        <div className={s.replay}>
+          <strong>REPLAY</strong>
+          <button
+            className={s.button}
+            aria-label={playing ? "Suspendre le replay" : "Lire le replay"}
+            onClick={() => setPlaying((v) => !v)}
+          >
+            {playing ? <Pause size={16} /> : <Play size={16} />}
+          </button>
+          <button
+            className={s.button}
+            aria-label="Bougie suivante"
+            onClick={() => setReplayIndex((i) => Math.min(replay.bars.length, i + 1))}
+          >
+            <StepForward size={16} />
+          </button>
+          <input
+            aria-label="Position du replay"
+            type="range"
+            min={15}
+            max={replay.bars.length}
+            value={replayIndex}
+            onChange={(e) => setReplayIndex(Number(e.target.value))}
+          />
+          <span>
+            {replayIndex} / {replay.bars.length}
+          </span>
+          <button
+            className={s.button}
+            onClick={() => {
+              setReplay(null);
+              setPlaying(false);
+              setNotice("");
+            }}
+          >
+            Retour au direct
+          </button>
+        </div>
+      )}
+      <div className={s.workspace}>
+        <aside className={s.tools} aria-label="Outils de dessin">
+          {toolButton("cursor", "Curseur et déplacement", Crosshair)}
+          {toolButton("trend", "Ligne de tendance", Spline)}
+          {toolButton("horizontal", "Ligne horizontale", Minus)}
+          {toolButton("measure", "Mesurer une variation", Ruler)}
+          <span className={s.divider} />
+          <button className={s.button} aria-label="Zoom avant" onClick={() => zoom(0.7)}>
+            <ZoomIn size={19} />
+          </button>
+          <button className={s.button} aria-label="Zoom arrière" onClick={() => zoom(1.4)}>
+            <ZoomOut size={19} />
+          </button>
+          <button className={s.button} aria-label="Réinitialiser le zoom" onClick={() => range(60)}>
+            <RotateCcw size={18} />
+          </button>
+          <span className={s.spacer} />
+          <button
+            className={s.button}
+            aria-label="Effacer les tracés"
+            onClick={() => {
+              setDrawings((d) => ({ ...d, [symbol]: [] }));
+              setRedo([]);
+              setNotice("Tracés effacés pour cette crypto.");
+            }}
+          >
+            <Trash2 size={18} />
+          </button>
+        </aside>
+        <section
+          id="market-chart"
+          className={s.surface}
+          aria-label="Grand graphique des cryptomonnaies"
+        >
+          <div className={s.quote}>
+            <span className={s.price} data-live-price>
+              {history ? priceNumber(history.price) : "—"} USDT
+            </span>
+            <span className={history && history.changePct < 0 ? s.down : s.up}>
+              {history && !replay
+                ? `${history.changePct >= 0 ? "+" : ""}${number(history.changePct, 2)} %`
+                : "Cours historique"}
+            </span>
+            <span className={s.muted}>
+              WMA {period} {indicators.wma ? "" : "masquée"}
+            </span>
+            <span className={s.spacer} />
+            <span className={s.muted} data-live-status>
+              {replay ? "Replay" : status}
+            </span>
+          </div>
+          {history ? (
+            <Canvas
+              key={`${symbol}:${resolution}`}
+              history={history}
+              price={history.price}
+              period={period}
+              indicators={indicators}
+              log={log}
+              line={line}
+              drawings={drawings[symbol] ?? []}
+              tool={tool}
+              events={selected?.events ?? EMPTY}
+              levels={selected?.levels ?? NO_LEVELS}
+              timeZone={timeZone}
+              height={chartHeight}
+              onReady={(c) => {
+                chart.current = c;
+              }}
+              onDraw={addDrawing}
+              onMeasure={setNotice}
+            />
+          ) : (
+            <p role="status" style={{ height: chartHeight, padding: 30 }}>
+              Connexion au marché…
+            </p>
+          )}
+          <div className={s.range}>
+            <button className={s.button} onClick={() => range(90)}>
+              30 bougies
+            </button>
+            <button className={s.button} onClick={() => range(60)}>
+              120
+            </button>
+            <button className={s.button} onClick={() => range(0)}>
+              Tout
+            </button>
+            <button
+              className={s.button}
+              aria-label={enabled ? "Mettre en pause" : "Reprendre le direct"}
+              onClick={() => setEnabled((v) => !v)}
+            >
+              {enabled ? <Pause size={14} /> : <Play size={14} />}
+            </button>
+            <button
+              className={s.button}
+              aria-label="Exporter les bougies en CSV"
+              onClick={exportBars}
+            >
+              <Download size={14} />
+            </button>
+            <span className={s.spacer} />
+            <span className={s.muted} data-live-updated>
+              {receivedAt ? new Date(receivedAt).toISOString().slice(11, 19) : "—"} UTC
+            </span>
+            <button
+              className={`${s.button} ${log ? s.active : ""}`}
+              aria-pressed={log}
+              onClick={() => setLog((v) => !v)}
+            >
+              log
+            </button>
+            <button className={`${s.button} ${s.active}`} onClick={() => range(60)}>
+              auto
+            </button>
+          </div>
+          <div className={s.tabs} role="tablist" aria-label="Panneaux du terminal">
+            {(
+              [
+                ["scanner", "Screener crypto"],
+                ["indicators", "Indicateurs"],
+                ["strategy", "Testeur de stratégie"],
+                ["trades", "Trading panel"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                id={`tab-${value}`}
+                role="tab"
+                aria-selected={panel && tab === value}
+                aria-controls="terminal-panel"
+                className={`${s.button} ${panel && tab === value ? s.active : ""}`}
+                onClick={() => {
+                  setPanel((v) => (tab === value ? !v : true));
+                  setTab(value);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <span className={s.spacer} />
+            <button
+              className={s.button}
+              aria-label={panel ? "Réduire le panneau" : "Ouvrir le panneau"}
+              onClick={() => setPanel((v) => !v)}
+            >
+              {panel ? <Minus size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
+          {panel && (
+            <div
+              id="terminal-panel"
+              role="tabpanel"
+              aria-labelledby={`tab-${tab}`}
+              className={s.panel}
+            >
+              {tab === "scanner" && (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Symbole</th>
+                      <th>Prix USDT</th>
+                      <th>24 h</th>
+                      <th>Flux</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {LIVE_SYMBOLS.map((pair) => (
+                      <WatchRow key={pair} symbol={pair} onSelect={setSymbol} />
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {tab === "indicators" && (
+                <>
+                  <div className={s.config}>
+                    {(["wma", "volume", "mfi", "aroon"] as const).map((key) => (
+                      <label key={key}>
+                        <input
+                          type="checkbox"
+                          checked={indicators[key]}
+                          onChange={(e) =>
+                            setIndicators((i) => ({ ...i, [key]: e.target.checked }))
+                          }
+                        />
+                        {key === "volume" ? "Volume" : key.toUpperCase()}
+                      </label>
+                    ))}
+                    <label>
+                      Période WMA
+                      <input
+                        aria-label="Période WMA"
+                        type="number"
+                        min={3}
+                        max={100}
+                        value={period}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          if (Number.isInteger(value) && value >= 3 && value <= 100)
+                            setPeriod(value);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className={`${s.muted} mt-5`}>
+                    WMA : moyenne pondérée des clôtures. MFI : flux monétaire sur 14 bougies. Aroon
+                    : haut / bas sur 14 périodes. Calculés sur les bougies Binance affichées.
+                  </p>
+                </>
+              )}
+              {tab === "strategy" && (
+                <>
+                  <div className={s.config}>
+                    <div className={s.metric}>
+                      Capital initial<strong>1’000 USDT</strong>
+                    </div>
+                    <div className={s.metric}>
+                      Performance simulée
+                      <strong className={research.returnPct < 0 ? s.down : s.up}>
+                        {number(research.returnPct, 2)} %
+                      </strong>
+                    </div>
+                    <div className={s.metric}>
+                      Trades clôturés<strong>{research.trades.length}</strong>
+                    </div>
+                    <div className={s.metric}>
+                      Capital estimé<strong>{number(research.equity, 2)} USDT</strong>
+                    </div>
+                  </div>
+                  <p className={`${s.muted} mt-4`}>
+                    Simulation long WMA {period} sur les bougies chargées et clôturées. Signal au
+                    croisement, exécution à l’ouverture suivante, frais de 0,1 % par côté.{" "}
+                    {research.open ? "Position finale valorisée au dernier cours. " : ""}Sans
+                    slippage. Cette simulation n’est pas la stratégie du bot et ne passe aucun
+                    ordre.
+                  </p>
+                </>
+              )}
+              {tab === "trades" && (
+                <>
+                  <div className={s.config}>
+                    <label>
+                      Trade affiché
+                      <select
+                        aria-label="Trade affiché sur le graphique"
+                        className="max-w-full rounded border bg-background p-2"
+                        value={selected?.key ?? ""}
+                        onChange={(e) => setSelectedTrade(e.target.value)}
+                      >
+                        {symbolTrades.length ? (
+                          symbolTrades.map((t) => (
+                            <option key={t.key} value={t.key}>
+                              {t.symbol} · {t.openedAt.replace("T", " ").slice(0, 16)} ·{" "}
+                              {t.status === "open" ? "Ouvert" : "Clôturé"}
+                            </option>
+                          ))
+                        ) : (
+                          <option>Aucun trade</option>
+                        )}
+                      </select>
+                    </label>
+                    <button
+                      className={s.button}
+                      onClick={() => {
+                        router.refresh();
+                        setNotice("Actualisation des trades du journal.");
+                      }}
+                    >
+                      Actualiser les trades
+                    </button>
+                    <a href={`/trades?symbol=${symbol}`}>Historique complet</a>
+                  </div>
+                  <p className={`${s.muted} my-3`}>
+                    ▲ Entrées · ◆ Sorties · SL rouge / TP vert de référence, calculés avec les
+                    paramètres actuels du bot. Exécutions démo/testnet, cours Binance Spot. Les
+                    événements antérieurs aux bougies chargées restent accessibles dans le détail du
+                    trade.
+                  </p>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Trade</th>
+                        <th>Compte</th>
+                        <th>Prix d’entrée</th>
+                        <th>Quantité ouverte</th>
+                        <th>P&amp;L réalisé</th>
+                        <th>Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {symbolTrades.map((t) => (
+                        <tr key={t.key}>
+                          <td>
+                            <a href={tradePath(t.key)}>{timestamp(t.openedAt, timeZone)}</a>
+                          </td>
+                          <td>{t.account}</td>
+                          <td>{priceNumber(t.avgEntry)}</td>
+                          <td>{number(t.openQuantity, 6)}</td>
+                          <td className={t.netPnl < 0 ? s.down : s.up}>
+                            {number(t.netPnl, 4)} USDT
+                          </td>
+                          <td>{t.status === "open" ? "Ouvert" : "Clôturé"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+      <Dialog open={alertDialog} onOpenChange={setAlertDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alerte de prix · {symbol.replace("USDT", " / USDT")}</DialogTitle>
+            <DialogDescription>
+              Les alertes fonctionnent sur la crypto sélectionnée tant que cet onglet reste ouvert,
+              en direct. Elles sont conservées pendant cette session.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const price = Number(alertPrice);
+              if (Number.isFinite(price) && price > 0) {
+                setAlerts((a) => [
+                  ...a,
+                  { id: crypto.randomUUID(), symbol, price, direction, triggered: false },
+                ]);
+                setAlertDialog(false);
+                setNotice(
+                  `Alerte créée : ${symbol} ${direction === "above" ? "≥" : "≤"} ${priceNumber(price)} USDT.`,
+                );
+              }
+            }}
+          >
+            <label className="block text-sm">
+              Déclenchement
+              <select
+                className="mt-1 block w-full rounded border bg-background p-2"
+                value={direction}
+                onChange={(e) => setDirection(e.target.value as typeof direction)}
+              >
+                <option value="above">Prix supérieur ou égal</option>
+                <option value="below">Prix inférieur ou égal</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              Prix USDT
+              <input
+                required
+                aria-label="Prix de l’alerte"
+                className="mt-1 block w-full rounded border bg-background p-2"
+                type="number"
+                min="0.0000000001"
+                step="any"
+                value={alertPrice}
+                onChange={(e) => setAlertPrice(e.target.value)}
+              />
+            </label>
+            <button type="submit" className="rounded bg-brand px-4 py-2 text-sm text-white">
+              Créer l’alerte
+            </button>
+          </form>
+          {alerts.length > 0 && (
+            <ul className="space-y-2 text-sm">
+              {alerts.map((a) => (
+                <li key={a.id}>
+                  {a.symbol} {a.direction === "above" ? "≥" : "≤"} {priceNumber(a.price)} ·{" "}
+                  {a.triggered ? "Déclenchée" : "Active"}{" "}
+                  <button
+                    aria-label="Supprimer l’alerte"
+                    className="ml-2 text-loss"
+                    onClick={() => setAlerts((v) => v.filter((x) => x.id !== a.id))}
+                  >
+                    Supprimer
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

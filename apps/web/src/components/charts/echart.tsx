@@ -22,12 +22,16 @@ export function EChart({
   className,
   height = 280,
   preserveZoom = false,
+  onReady,
 }: {
   option: EChartsOption;
   className?: string;
   height?: number | string;
   preserveZoom?: boolean;
+  onReady?: (chart: echarts.ECharts) => void;
 }) {
+  const readyRef = useRef(onReady);
+  readyRef.current = onReady;
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const applyRef = useRef<() => void>(() => {});
@@ -67,6 +71,7 @@ export function EChart({
       chartRef.current = chart;
       initialized.current = false;
       applyRef.current();
+      readyRef.current?.(chart);
       let width = host.clientWidth,
         height = host.clientHeight;
       observer = new ResizeObserver(([entry]) => {

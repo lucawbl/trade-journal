@@ -334,3 +334,17 @@ Live chart updates merge data into the existing ECharts instance without
 reapplying dataZoom. While dragging or using wheel zoom, chart redraws wait
 until the gesture ends and then apply the latest received data; the quote feed
 continues independently.
+
+The market page now uses a compact terminal layout with synchronized candle,
+MFI-14 and Aroon-14 panes, a configurable WMA and optional volume. It includes
+trend/horizontal lines, a two-point percentage ruler, undo/redo, logarithmic
+pricing, PNG/CSV downloads and a live DOGE/PEPE/BTC screener. Drawing coordinates
+and indicator preferences are saved per device in versioned local storage.
+The loaded candles can be frozen, scrubbed and played without touching the bots.
+Price alerts are session-only and evaluate the selected live symbol while the
+page is visible; they do not run in the background or deliver notifications.
+The Trading panel selects imported trades and shows their attributed fills and
+current-strategy SL/TP references. The WMA research panel is a separate long-only
+simulation on loaded closed candles, filled at the following open with 0.1% fees
+per side; it does not reproduce a bot strategy. Pine Script and broker order
+submission are not implemented by this terminal.
