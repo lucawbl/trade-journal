@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { JournalRefresh } from "./journal-refresh";
 import type { EquityPoint } from "@luxalgo/journal-core";
 import type { JournalView } from "@/server/journal-view";
 import { tradePath } from "@/lib/trade-links";
@@ -77,9 +78,10 @@ export function JournalShell({
             Environnement démo
           </span>
         </div>
+        <JournalRefresh />
         {children}
         <footer className="border-t pt-4 text-xs text-muted-foreground">
-          Données du journal SQLite · Actualisez la page pour afficher les dernières exécutions.
+          Données du journal SQLite · Activez l’actualisation automatique pour suivre les nouvelles exécutions.
         </footer>
       </div>
     </main>
