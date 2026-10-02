@@ -17,11 +17,13 @@ export function CandleCanvas({
   events,
   levels,
   timeZone,
+  livePrice,
 }: {
   history: MarketHistory;
   events: Events;
   levels: ReturnType<typeof riskTimeline>;
   timeZone: string;
+  livePrice?: number;
 }) {
   const bars = history.bars;
   const step = RESOLUTIONS[history.resolution];
@@ -50,7 +52,15 @@ export function CandleCanvas({
     backgroundColor: "transparent",
     animation: false,
     color: ["#34d399", "#60a5fa", "#fb923c", "#f87171", "#34d399"],
-    legend: { top: 0, textStyle: { color: "#a1a1aa" } },
+    legend: {
+      top: 0,
+      textStyle: { color: "#a1a1aa" },
+      data: [
+        "Bougies Binance Spot",
+        ...(events.length ? ["Entrées", "Sorties"] : []),
+        ...(levels.length ? ["SL de référence", "TP de référence"] : []),
+      ],
+    },
     grid: { left: 18, right: 115, top: 45, bottom: 70 },
     tooltip: {
       trigger: "axis",
@@ -130,6 +140,20 @@ export function CandleCanvas({
         lineStyle: { color: "#34d399", type: "dashed", width: 2 },
         itemStyle: { color: "#34d399" },
       },
+      ...(livePrice != null
+        ? [
+            {
+              name: "Cours actuel",
+              type: "line" as const,
+              data: bars.map(() => livePrice),
+              showSymbol: false,
+              silent: true,
+              lineStyle: { color: "#38bdf8", type: "dashed" as const, width: 1 },
+              itemStyle: { color: "#38bdf8" },
+              endLabel: { show: true, color: "#38bdf8", formatter: () => priceNumber(livePrice) },
+            },
+          ]
+        : []),
     ],
   };
   return (
@@ -137,9 +161,9 @@ export function CandleCanvas({
       <div
         className="min-w-[640px]"
         role="img"
-        aria-label={`Graphique en bougies ${history.symbol}, achats et ventes, stop-loss et take-profit de référence. Les valeurs sont détaillées dans le tableau ci-dessous.`}
+        aria-label={`Graphique en bougies ${history.symbol}${livePrice != null ? ` en direct, cours ${priceNumber(livePrice)} USDT` : ""}${events.length ? ", achats et ventes" : ""}${levels.length ? ", stop-loss et take-profit de référence" : ""}.`}
       >
-        <EChart option={option} height={440} />
+        <EChart option={option} height={440} preserveZoom />
       </div>
     </div>
   );

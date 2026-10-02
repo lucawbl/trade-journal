@@ -1,3 +1,4 @@
+import { LiveMarketChart } from "@/components/live-market-chart";
 import {
   EquityChart,
   JournalShell,
@@ -20,6 +21,9 @@ export default async function DashboardPage() {
   return (
     <JournalShell title="Vue d’ensemble" active="dashboard">
       <SummaryMetrics view={view} />
+      <Panel title="Cours des cryptos en direct">
+        <LiveMarketChart timeZone={view.timeZone} />
+      </Panel>
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Panel title="Évolution du P&L clôturé">

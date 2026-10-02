@@ -313,3 +313,14 @@ the remaining position. They are not historical stop orders or exit reasons.
 Missing parameters or incomplete execution history hide the references.
 `GET /api/trades/[key]/chart` requires the journal session, bounds candle requests
 to 1,500 bars and never places orders or changes bot configuration.
+
+### Live market prices
+
+The dashboard and supported trade pages now offer a live Binance Spot chart.
+A public WebSocket stream updates the current price and forming candle; if the
+stream is unavailable, authenticated `/api/market/live` requests refresh every
+three seconds without using the history cache. The UI identifies the active
+connection mode and last reception time. Pausing or hiding the tab stops the
+feed; reconnecting reloads the rolling 300-candle window. Chart zoom is preserved
+across feed updates. Trade pages retain an independent historical replay mode.
+Market data access is read-only and never changes bot orders or strategy.

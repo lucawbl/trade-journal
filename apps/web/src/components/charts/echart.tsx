@@ -21,10 +21,12 @@ export function EChart({
   option,
   className,
   height = 280,
+  preserveZoom = false,
 }: {
   option: EChartsOption;
   className?: string;
   height?: number;
+  preserveZoom?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -66,22 +68,38 @@ export function EChart({
 
   useEffect(() => {
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () =>
+    const apply = () => {
+      const zoom = preserveZoom
+        ? (
+            chartRef.current?.getOption() as
+              { dataZoom?: { start?: number; end?: number }[] } | undefined
+          )?.dataZoom
+        : undefined;
       chartRef.current?.setOption(
         {
           ...option,
-          animation: !motion.matches,
+          ...(zoom?.length && Array.isArray(option.dataZoom)
+            ? {
+                dataZoom: option.dataZoom.map((item, index) => ({
+                  ...item,
+                  start: zoom[index]?.start ?? item.start,
+                  end: zoom[index]?.end ?? item.end,
+                })),
+              }
+            : {}),
+          animation: option.animation ?? !motion.matches,
           animationDuration: 850,
           animationDurationUpdate: 0,
           animationEasing: "cubicInOut",
         },
         { notMerge: true },
       );
+    };
     applyRef.current = apply;
     apply();
     motion.addEventListener("change", apply);
     return () => motion.removeEventListener("change", apply);
-  }, [option]);
+  }, [option, preserveZoom]);
 
   return (
     <div

@@ -1,5 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
+import { LiveMarketChart } from "./live-market-chart";
+import { isLiveSymbol } from "@/lib/live-market";
 import { useEffect, useState } from "react";
 import type { RoundTrip } from "@luxalgo/journal-core";
 import { executionChart, type ChartExecution } from "@/lib/execution-chart";
@@ -25,6 +27,7 @@ export function TradeRiskChart({
   risk: BotRisk | null;
   timeZone: string;
 }) {
+  const [mode, setMode] = useState<"live" | "history">("live");
   const [history, setHistory] = useState<MarketHistory | null>(null);
   const [error, setError] = useState("");
   const [resolution, setResolution] = useState("");
@@ -35,6 +38,7 @@ export function TradeRiskChart({
   const lastExecution = events.at(-1)?.executedAt;
   const riskRefresh = risk?.fetchedAt;
   useEffect(() => {
+    if (mode !== "history") return;
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -55,59 +59,90 @@ export function TradeRiskChart({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [trade.key, trade.closedAt, lastExecution, riskRefresh, resolution, attempt]);
+  }, [trade.key, trade.closedAt, lastExecution, riskRefresh, resolution, attempt, mode]);
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="text-sm">
-          Unité de temps{" "}
-          <select
-            value={resolution}
-            onChange={(event) => setResolution(event.target.value)}
-            className="ml-2 rounded-md border bg-background p-2"
-          >
-            <option value="">Automatique</option>
-            {["1m", "5m", "15m", "1h", "1d"].map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Mode du graphique">
         <button
           type="button"
-          disabled={loading}
-          onClick={() => setAttempt((value) => value + 1)}
-          className="rounded-md border px-3 py-2 text-sm hover:bg-secondary disabled:opacity-50"
+          aria-pressed={mode === "live"}
+          onClick={() => setMode("live")}
+          className={`rounded-md border px-4 py-2 text-sm ${mode === "live" ? "bg-secondary font-medium" : "hover:bg-secondary"}`}
         >
-          Recharger le graphique
+          Cours en direct
+        </button>
+        <button
+          type="button"
+          aria-pressed={mode === "history"}
+          onClick={() => setMode("history")}
+          className={`rounded-md border px-4 py-2 text-sm ${mode === "history" ? "bg-secondary font-medium" : "hover:bg-secondary"}`}
+        >
+          Historique du trade
         </button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Bougies clôturées du marché Binance Spot · Exécutions du bot démo/testnet : leurs prix
-        peuvent différer du marché. Zoom avec la barre sous le graphique · Sur mobile, faites
-        glisser le graphique horizontalement.
-      </p>
-      {loading ? (
-        <p role="status" className="py-8 text-sm">
-          Chargement des bougies…
-        </p>
-      ) : error ? (
-        <p role="alert" className="rounded-md border border-loss/30 p-4 text-sm">
-          {error}
-        </p>
-      ) : history?.bars.length ? (
-        <CandleCanvas history={history} events={events} levels={levels} timeZone={timeZone} />
+      {mode === "live" && isLiveSymbol(trade.symbol) ? (
+        <LiveMarketChart
+          key={trade.symbol}
+          initialSymbol={trade.symbol}
+          locked
+          timeZone={timeZone}
+          events={events}
+          levels={levels}
+        />
       ) : (
-        <p className="py-8 text-sm text-muted-foreground">
-          Aucune bougie disponible sur cette période.
-        </p>
-      )}
-      {history && (
-        <p className="text-xs text-muted-foreground">
-          {history.bars.length} bougies · {history.resolution} · Fuseau : {timeZone}
-          {history.truncated ? " · Historique incomplet" : ""}
-        </p>
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="text-sm">
+              Unité de temps{" "}
+              <select
+                value={resolution}
+                onChange={(event) => setResolution(event.target.value)}
+                className="ml-2 rounded-md border bg-background p-2"
+              >
+                <option value="">Automatique</option>
+                {["1m", "5m", "15m", "1h", "1d"].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setAttempt((value) => value + 1)}
+              className="rounded-md border px-3 py-2 text-sm hover:bg-secondary disabled:opacity-50"
+            >
+              Recharger le graphique
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Bougies clôturées du marché Binance Spot · Exécutions du bot démo/testnet : leurs prix
+            peuvent différer du marché. Zoom avec la barre sous le graphique · Sur mobile, faites
+            glisser le graphique horizontalement.
+          </p>
+          {loading ? (
+            <p role="status" className="py-8 text-sm">
+              Chargement des bougies…
+            </p>
+          ) : error ? (
+            <p role="alert" className="rounded-md border border-loss/30 p-4 text-sm">
+              {error}
+            </p>
+          ) : history?.bars.length ? (
+            <CandleCanvas history={history} events={events} levels={levels} timeZone={timeZone} />
+          ) : (
+            <p className="py-8 text-sm text-muted-foreground">
+              Aucune bougie disponible sur cette période.
+            </p>
+          )}
+          {history && (
+            <p className="text-xs text-muted-foreground">
+              {history.bars.length} bougies · {history.resolution} · Fuseau : {timeZone}
+              {history.truncated ? " · Historique incomplet" : ""}
+            </p>
+          )}
+        </>
       )}
       {risk ? (
         <p className="rounded-md border p-3 text-xs text-muted-foreground">
