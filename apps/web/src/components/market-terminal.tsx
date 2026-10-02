@@ -186,7 +186,6 @@ export function MarketTerminal({
     window.history.replaceState(window.history.state, "", url);
     chart.current = null;
     setRedo([]);
-    setSelectedTrade("");
     setReplay(null);
     setPlaying(false);
     setTool("cursor");
@@ -900,7 +899,7 @@ export function MarketTerminal({
         </section>
       </div>
       <Dialog open={alertDialog} onOpenChange={setAlertDialog}>
-        <DialogContent>
+        <DialogContent container={host.current}>
           <DialogHeader>
             <DialogTitle>Alerte de prix · {symbol.replace("USDT", " / USDT")}</DialogTitle>
             <DialogDescription>

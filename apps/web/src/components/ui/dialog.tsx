@@ -11,10 +11,11 @@ const DialogTrigger = DialogPrimitive.Trigger;
 function DialogContent({
   className,
   children,
+  container,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { container?: HTMLElement | null }) {
   return (
-    <DialogPrimitive.Portal>
+    <DialogPrimitive.Portal container={container}>
       <DialogPrimitive.Overlay className="journal-popup fixed inset-0 z-50 bg-black/60" />
       <DialogPrimitive.Content
         className={cn(
