@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-view-test-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-const { db, accounts, executions, trades } = await import("../src/db");
+const { db, accounts, executions, trades, settings } = await import("../src/db");
 const { readJournalView, requireJournalSession } = await import("../src/server/journal-view");
 const { sessionToken } = await import("../src/server/auth");
 const { POST } = await import("../src/app/api/bot-ingest/route");
@@ -49,6 +49,7 @@ beforeEach(() => {
   vi.stubEnv("JOURNAL_PASSWORD", "");
   vi.stubEnv("JOURNAL_INGEST_SECRET", "test-ingest-secret");
   session.token = undefined;
+  db.delete(settings).run();
   db.delete(trades).run();
   db.delete(executions).run();
   db.delete(accounts).run();
@@ -85,6 +86,32 @@ describe("server-rendered journal", () => {
       winRate: 1,
     });
     expect(readJournalView().overview.equity).toHaveLength(1);
+  });
+  it("keeps report groups and calendar totals in the reporting currency and journal timezone", async () => {
+    await ingest();
+    await ingest([{ ...fills[1]!, quantity: 1, executedAt: "2026-10-02T00:05:00Z" }]);
+    db.update(accounts).set({ currency: "USD" }).run();
+    db.insert(settings)
+      .values([
+        {
+          key: "currencyConversion",
+          value: JSON.stringify({ enabled: true, reportingCurrency: "EUR", rates: { USD: 0.9 } }),
+        },
+        { key: "timeZone", value: "America/New_York" },
+      ])
+      .run();
+    const { bySymbol, calendarMonthFromDays } = await import("@luxalgo/journal-core");
+    const view = readJournalView({ status: "closed" });
+    const total = view.rows[0]!.netPnl * 0.9;
+    expect(view.currencyScope.currency).toBe("EUR");
+    expect(view.overview.metrics.netPnl).toBeCloseTo(total);
+    expect(bySymbol(view.projectedTrades)[0]!.netPnl).toBeCloseTo(total);
+    expect(view.overview.days[0]!.date).toBe("2026-10-01");
+    const calendar = calendarMonthFromDays(view.overview.days, 2026, 10);
+    expect(calendar.monthNetPnl).toBeCloseTo(total);
+    expect(calendar.monthTrades).toBe(1);
+    expect(readJournalView({ status: "closed", from: "2026-10-02" }).rows).toHaveLength(0);
+    expect(db.select().from(trades).all()[0]!.netPnl).toBeCloseTo(total / 0.9);
   });
   it("records valid ingestion and duplicate retries without duplicating fills", async () => {
     expect((await ingest()).status).toBe(200);

@@ -35,7 +35,7 @@ export function JournalShell({
   children,
 }: {
   title: string;
-  active: "dashboard" | "trades" | "accounts";
+  active: "dashboard" | "trades" | "accounts" | "reports" | "calendar";
   children: ReactNode;
 }) {
   return (
@@ -58,13 +58,15 @@ export function JournalShell({
           </a>
           <nav
             aria-label="Navigation principale"
-            className="flex gap-1 rounded-lg border p-1 text-sm"
+            className="flex max-w-full flex-wrap gap-1 rounded-lg border p-1 text-sm"
           >
             {(
               [
                 ["dashboard", "/", "Dashboard"],
                 ["trades", "/trades", "Trades"],
                 ["accounts", "/accounts", "Accounts"],
+                ["reports", "/reports", "Rapports"],
+                ["calendar", "/calendar", "Calendrier"],
               ] as const
             ).map(([key, href, label]) => (
               <a

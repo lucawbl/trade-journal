@@ -52,6 +52,7 @@ export function readJournalView(filters: AnalysisFilters = {}) {
       (a, b) => b.openedAt.localeCompare(a.openedAt) || a.key.localeCompare(b.key),
     ),
     trades,
+    projectedTrades: projection.trades,
     timeZone,
     overview,
     currencyScope: projection.scope,

@@ -1,129 +1,157 @@
-"use client";
+import { calendarMonthFromDays, dayKeyOf, readFilters } from "@luxalgo/journal-core";
+import { JournalFilters } from "@/components/journal-filters";
+import { JournalShell, Metric, Panel, PnlValue, number } from "@/components/journal-view";
+import { journalMonth } from "@/lib/journal-month";
+import { readJournalView, requireJournalSession } from "@/server/journal-view";
 
-import { Suspense, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { dayKeyOf } from "@luxalgo/journal-core";
-import { CurrencyNotice } from "@/components/currency-notice";
-import { CalendarPnl } from "@/components/calendar-pnl";
-import { FilterBar, useFilters } from "@/components/filter-bar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useApi } from "@/lib/use-api";
-import { CalendarPerformance } from "@/components/calendar-insights";
-import type { CalendarResponse } from "@/lib/calendar-insights";
-import Loading from "@/app/loading";
+export const dynamic = "force-dynamic";
 
-export default function CalendarPage() {
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  await requireJournalSession();
+  const params = await searchParams;
+  const value = (key: string) =>
+    typeof params[key] === "string" ? (params[key] as string) : undefined;
+  const filters = { ...readFilters({ get: (key) => value(key) ?? null }), status: "closed" };
+  delete filters.from;
+  delete filters.to;
+  const view = readJournalView(filters);
+  const today = dayKeyOf(new Date().toISOString(), view.timeZone);
+  const selection = journalMonth(value("month"), today);
+  const calendar = calendarMonthFromDays(view.overview.days, selection.year, selection.month);
+  const { monetary, currency: scopeCurrency } = view.currencyScope;
+  const currency = scopeCurrency ?? "";
+  const monthLink = (month: string) => `/calendar?${new URLSearchParams({ ...filters, month })}`;
+  const dayLink = (date: string) =>
+    `/trades?${new URLSearchParams({ ...filters, from: date, to: date })}`;
+  const activity = view.overview.days.filter((day) => day.date.startsWith(selection.key));
   return (
-    <Suspense fallback={<Loading />}>
-      <CalendarView />
-    </Suspense>
-  );
-}
-
-function CalendarView() {
-  const { query, timeZone } = useFilters();
-  const [selection, setMonth] = useState<{ year: number; month: number } | null>(null);
-  const { data, error, refresh } = useApi<CalendarResponse>(
-    `/api/calendar?${query}${selection ? `&calYear=${selection.year}&calMonth=${selection.month}` : ""}`,
-  );
-  const today = dayKeyOf(new Date().toISOString(), timeZone);
-  const month = selection ??
-    data?.calendar ?? { year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) };
-
-  const shift = (delta: number) => {
-    const next = new Date(Date.UTC(month.year, month.month - 1 + delta, 1));
-    setMonth({ year: next.getUTCFullYear(), month: next.getUTCMonth() + 1 });
-  };
-
-  return (
-    <div>
-      <FilterBar
-        title="Calendar"
-        actions={
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => shift(-1)}
-              aria-label="Previous month"
-            >
-              <ChevronLeft />
-            </Button>
-            <span className="w-36 text-center text-sm font-medium">
-              {new Date(Date.UTC(month.year, month.month - 1)).toLocaleString("en-US", {
-                month: "long",
-                year: "numeric",
-                timeZone: "UTC",
-              })}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => shift(1)}
-              aria-label="Next month"
-            >
-              <ChevronRight />
-            </Button>
-          </div>
-        }
-      />
-      {data?.currencyScope && <CurrencyNotice scope={data.currencyScope} />}
-      <div className="space-y-4 p-4">
-        <Card>
-          <CardContent className="pt-4">
-            {error ? (
-              <div role="alert" className="space-y-3 py-6 text-sm">
-                <p className="text-destructive">{error}</p>
-                <Button variant="outline" onClick={refresh}>
-                  Try again
-                </Button>
-              </div>
-            ) : data?.currencyScope?.monetary === false ? (
-              <div className="space-y-6">
-                {data.currencyGroups?.map((group) => (
-                  <div key={group.currency}>
-                    <p className="mb-3 text-sm font-medium">{group.currency} accounts</p>
-                    <CalendarPnl calendar={group.calendar} currency={group.currency} />
-                  </div>
-                ))}
-              </div>
-            ) : data ? (
-              <CalendarPnl
-                calendar={data.calendar}
-                currency={data.currencies[0] ?? "USD"}
-                monetary={data.currencies.length <= 1}
-                runningPnl={data.runningPnl}
-              />
-            ) : (
-              <div role="status" aria-label="Loading calendar">
-                <Skeleton className="h-96" />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        {data && data.currencyScope?.monetary !== false && (
-          <CalendarPerformance
-            key={`${data.calendar.year}-${data.calendar.month}-${query}`}
-            data={data}
-            query={query}
-          />
-        )}
-        {!data && !error && (
-          <div
-            role="status"
-            aria-label="Loading performance insights"
-            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+    <JournalShell title="Calendrier de trading" active="calendar">
+      <Panel title="Comptes et symboles">
+        <JournalFilters
+          action="/calendar"
+          accounts={view.accounts}
+          filters={filters}
+          month={selection.key}
+          closedOnly
+        />
+      </Panel>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold capitalize">{selection.label}</h2>
+        <nav aria-label="Choix du mois" className="flex gap-2">
+          <a
+            href={monthLink(selection.previous)}
+            aria-label="Mois précédent"
+            className="rounded-md border px-3 py-2 text-sm"
           >
-            {[0, 1, 2, 3].map((index) => (
-              <Skeleton key={index} className="h-28" />
+            ←
+          </a>
+          <a href={monthLink(today.slice(0, 7))} className="rounded-md border px-3 py-2 text-sm">
+            Ce mois
+          </a>
+          <a
+            href={monthLink(selection.next)}
+            aria-label="Mois suivant"
+            className="rounded-md border px-3 py-2 text-sm"
+          >
+            →
+          </a>
+        </nav>
+      </div>
+      {!monetary && (
+        <p role="status" className="rounded-lg border p-4 text-sm text-muted-foreground">
+          Sélectionnez un compte pour afficher les montants dans une devise unique.
+        </p>
+      )}
+      <section aria-label="Bilan du mois" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric
+          label="P&L net du mois"
+          value={monetary ? <PnlValue value={calendar.monthNetPnl} currency={currency} /> : "—"}
+          hint="Trades entièrement clôturés"
+        />
+        <Metric label="Trades clôturés" value={calendar.monthTrades} hint="Par date de clôture" />
+        <Metric
+          label="Jours de trading"
+          value={calendar.tradingDays}
+          hint="Jours avec au moins une clôture"
+        />
+        <Metric
+          label="Jours gagnants"
+          value={monetary ? calendar.winningDays : "—"}
+          hint="Jours avec un résultat net positif"
+        />
+      </section>
+      <Panel title={`Clôtures de ${selection.label}`}>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
+          {["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"].map((day) => (
+            <div key={day} className="pb-2 text-center text-xs text-muted-foreground">
+              {day}
+            </div>
+          ))}
+          {calendar.weeks
+            .flatMap((week) => week.days)
+            .map((day, index) =>
+              !day ? (
+                <div key={`blank-${index}`} aria-hidden="true" />
+              ) : (
+                <a
+                  key={day.date}
+                  href={dayLink(day.date)}
+                  aria-label={`${day.date} : ${day.trades} trades clôturés${monetary ? `, ${number(day.netPnl)} ${currency}` : ""}`}
+                  aria-current={day.date === today ? "date" : undefined}
+                  className={`min-h-20 min-w-0 rounded-md border p-1 text-center hover:border-brand sm:min-h-28 sm:p-3 ${day.date === today ? "border-brand" : ""} ${day.trades && monetary ? (day.netPnl > 0 ? "bg-profit/10" : day.netPnl < 0 ? "bg-loss/10" : "bg-secondary") : ""}`}
+                >
+                  <span className="block text-sm">{Number(day.date.slice(-2))}</span>
+                  {day.trades > 0 ? (
+                    <>
+                      <span className="mt-1 hidden text-xs sm:block">
+                        {monetary ? <PnlValue value={day.netPnl} currency={currency} /> : "—"}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-muted-foreground">
+                        {day.trades} trade{day.trades === 1 ? "" : "s"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="mt-2 block text-xs text-muted-foreground">—</span>
+                  )}
+                </a>
+              ),
+            )}
+        </div>
+        <p className="mt-4 text-xs text-muted-foreground">
+          Cliquez sur un jour pour consulter ses trades clôturés. Les positions encore ouvertes et
+          les sorties partielles sont exclues · Fuseau : {view.timeZone}.
+        </p>
+      </Panel>
+      <Panel title="Résultats quotidiens">
+        {activity.length ? (
+          <div className="space-y-3">
+            {activity.map((day) => (
+              <a
+                key={day.date}
+                href={dayLink(day.date)}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm hover:border-brand"
+              >
+                <span>
+                  {day.date} · {day.trades} trade{day.trades === 1 ? "" : "s"}
+                </span>
+                {monetary ? (
+                  <PnlValue value={day.netPnl} currency={currency} />
+                ) : (
+                  <span>Devise à sélectionner</span>
+                )}
+              </a>
             ))}
           </div>
+        ) : (
+          <p className="py-4 text-sm text-muted-foreground">
+            Aucune clôture complète ce mois-ci pour cette sélection.
+          </p>
         )}
-      </div>
-    </div>
+      </Panel>
+    </JournalShell>
   );
 }
