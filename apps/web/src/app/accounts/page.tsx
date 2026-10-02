@@ -1,39 +1,104 @@
-import Link from "next/link";
-import { headers } from "next/headers";
+import { JournalShell, Panel, PnlValue, number, timestamp } from "@/components/journal-view";
+import { readJournalView, requireJournalSession } from "@/server/journal-view";
 
 export const dynamic = "force-dynamic";
 
-async function api(path: string) {
-  const h = await headers();
-  const host = h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  if (!host) return null;
-  try {
-    const r = await fetch(`${proto}://${host}${path}`, { cache: "no-store" });
-    return r.ok ? await r.json() : null;
-  } catch { return null; }
-}
-const n=(v:unknown,d=2)=>typeof v==="number"&&Number.isFinite(v)?v.toFixed(d):"—";
-
 export default async function AccountsPage() {
-  const data=await api("/api/accounts");
-  const rows=data?.accounts ?? [];
-  return <main className="min-h-screen bg-background p-6 text-foreground"><div className="mx-auto max-w-6xl">
-    <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-      <div><h1 className="text-2xl font-semibold">Accounts</h1><p className="text-sm text-muted-foreground">Bybit Demo · server-rendered</p></div>
-      <nav className="flex gap-4 text-sm"><Link href="/">Dashboard</Link><Link href="/trades">Trades</Link><Link href="/accounts">Accounts</Link></nav>
-    </header>
-    <section className="grid gap-4 md:grid-cols-2">
-      {rows.length?rows.map((a:any)=><article key={a.id} className="rounded-xl border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="font-semibold">{a.name}</h2><p className="text-sm text-muted-foreground">{a.broker || "Broker"} · {a.kind}</p></div><span className="text-xs text-muted-foreground">{a.connected?"Connected":"Stored"}</span></div>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <div><p className="text-xs text-muted-foreground">Currency</p><p>{a.currency}</p></div>
-          <div><p className="text-xs text-muted-foreground">Initial balance</p><p>{n(a.initialBalance)} {a.currency}</p></div>
-          <div><p className="text-xs text-muted-foreground">Broker equity</p><p>{a.snapshot?n(a.snapshot.equity)+" "+a.currency:"—"}</p></div>
-          <div><p className="text-xs text-muted-foreground">Open positions</p><p>{a.snapshot?.positions?.length ?? 0}</p></div>
-        </div>
-        {a.lastSyncAt&&<p className="mt-4 text-xs text-muted-foreground">Last sync: {a.lastSyncAt.slice(0,16).replace("T"," ")}</p>}
-      </article>):<p className="text-sm text-muted-foreground">No account found.</p>}
-    </section>
-  </div></main>;
+  await requireJournalSession();
+  const view = readJournalView();
+  return (
+    <JournalShell title="Comptes et synchronisation" active="accounts">
+      <div className="grid gap-5 lg:grid-cols-2">
+        {view.accounts.map((account) => {
+          const rows = view.rows.filter((trade) => trade.accountId === account.id);
+          const closed = rows.filter((trade) => trade.status !== "open");
+          const netPnl = closed.reduce((sum, trade) => sum + trade.netPnl, 0);
+          const syncDate = account.lastSyncAt ? Date.parse(account.lastSyncAt) : NaN;
+          const recent = Number.isFinite(syncDate) && Date.now() - syncDate <= 5 * 60 * 1000;
+          return (
+            <Panel key={account.id} title={account.name}>
+              <div className="mb-5 flex flex-wrap justify-between gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  {account.broker || "Compte manuel"} · {account.currency}
+                </span>
+                <span
+                  className={`rounded-full border px-2 py-1 ${recent ? "text-profit" : "text-muted-foreground"}`}
+                >
+                  {account.archivedAt
+                    ? "Archivé"
+                    : recent
+                      ? "Réception récente"
+                      : account.lastSyncAt
+                        ? "Réception ancienne"
+                        : "Réception non datée"}
+                </span>
+              </div>
+              <dl className="grid grid-cols-2 gap-5 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Capital initial du journal</dt>
+                  <dd className="tnum mt-1">
+                    {number(account.initialBalance)} {account.currency}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">P&L net clôturé</dt>
+                  <dd className="mt-1">
+                    <PnlValue value={netPnl} currency={account.currency} />
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Trades clôturés</dt>
+                  <dd className="mt-1">{closed.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Positions ouvertes du journal</dt>
+                  <dd className="mt-1">{rows.length - closed.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Capital reconstitué</dt>
+                  <dd className="tnum mt-1">
+                    {number(account.initialBalance + netPnl)} {account.currency}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Equity transmise par le broker</dt>
+                  <dd className="tnum mt-1">
+                    {account.equity === null
+                      ? "Non transmise"
+                      : `${number(account.equity)} ${account.currency}`}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
+                Dernière réception réussie : {timestamp(account.lastSyncAt, view.timeZone)} ·{" "}
+                {view.timeZone}
+              </p>
+              <a
+                href={`/trades?accounts=${encodeURIComponent(account.id)}`}
+                className="mt-3 inline-block text-sm text-brand hover:underline"
+              >
+                Voir les trades de ce compte →
+              </a>
+            </Panel>
+          );
+        })}
+      </div>
+      {!view.accounts.length && (
+        <Panel title="Aucun compte">
+          <p className="text-sm text-muted-foreground">
+            Le compte DOGE sera créé à la première réception du bot.
+          </p>
+        </Panel>
+      )}
+      <Panel title="Comment lire ces données">
+        <p className="text-sm text-muted-foreground">
+          Le capital reconstitué additionne le capital initial du journal et les résultats des
+          trades entièrement clôturés. Les sorties partielles, positions non réalisées, dépôts et
+          retraits ne sont pas inclus. Ce montant peut donc différer de l’equity Bybit. La réception
+          des exécutions du bot fonctionne indépendamment d’une connexion directe du journal au
+          broker.
+        </p>
+      </Panel>
+    </JournalShell>
+  );
 }
