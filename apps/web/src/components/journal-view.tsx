@@ -4,7 +4,7 @@ import type { EquityPoint } from "@luxalgo/journal-core";
 import type { JournalView } from "@/server/journal-view";
 import { tradePath } from "@/lib/trade-links";
 
-import { number, timestamp } from "@/lib/journal-format";
+import { number, timestamp, priceNumber } from "@/lib/journal-format";
 export { number, timestamp } from "@/lib/journal-format";
 
 export function PnlValue({ value, currency }: { value: number; currency: string }) {
@@ -39,7 +39,7 @@ export function JournalShell({
             <span>
               Trade Journal
               <span className="block text-xs font-normal text-muted-foreground">
-                Suivi de trading · Bybit Demo
+                Suivi de trading · Comptes démo
               </span>
             </span>
           </a>
@@ -197,8 +197,8 @@ export function TradeTable({ view, limit }: { view: JournalView; limit?: number 
               <td className="tnum px-3">
                 {number(trade.quantity, 4)} / {number(trade.openQuantity, 4)}
               </td>
-              <td className="tnum px-3">{number(trade.avgEntry, 5)}</td>
-              <td className="tnum px-3">{number(trade.avgExit, 5)}</td>
+              <td className="tnum px-3">{priceNumber(trade.avgEntry)}</td>
+              <td className="tnum px-3">{priceNumber(trade.avgExit)}</td>
               <td className="px-3">
                 <PnlValue
                   value={trade.netPnl}

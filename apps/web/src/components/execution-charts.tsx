@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { RoundTrip } from "@luxalgo/journal-core";
 import { executionChart, type ChartExecution } from "@/lib/execution-chart";
-import { number, timestamp } from "@/lib/journal-format";
+import { number, timestamp, priceNumber } from "@/lib/journal-format";
 
 export function ExecutionCharts({
   trade,
@@ -38,13 +38,13 @@ export function ExecutionCharts({
   ];
   const low = Math.min(...prices),
     high = Math.max(...prices);
-  const padding = Math.max(high - low, Math.abs(high) * 0.002, 0.00001) * 0.25;
+  const padding = Math.max(high - low, Math.abs(high) * 0.002, 1e-12) * 0.25;
   const priceY = (price: number) =>
     230 - ((price - low + padding) / (high - low + padding * 2)) * 190;
   const maxPosition = Math.max(...events.map((event) => event.position), 1e-10);
   const quantityY = (quantity: number) => 230 - (quantity / maxPosition) * 190;
   const label = (event: (typeof events)[number]) =>
-    `${event.kind === "entry" ? "Entrée" : "Sortie"} · ${timestamp(event.executedAt, timeZone)} · ${number(event.quantity, 4)} unités à ${number(event.price, 5)} ${currency}`;
+    `${event.kind === "entry" ? "Entrée" : "Sortie"} · ${timestamp(event.executedAt, timeZone)} · ${number(event.quantity, 4)} unités à ${priceNumber(event.price)} ${currency}`;
   const marks = (y: (event: (typeof events)[number]) => number, mode: "price" | "quantity") =>
     events.map((event, index) => {
       const cx = x(event.time),
@@ -107,7 +107,7 @@ export function ExecutionCharts({
               paintOrder="stroke"
             >
               {mode === "price"
-                ? `${event.kind === "entry" ? "Entrée" : "Sortie"} ${number(event.price, 5)}`
+                ? `${event.kind === "entry" ? "Entrée" : "Sortie"} ${priceNumber(event.price)}`
                 : `${number(event.position, 4)} unités`}
             </text>
           )}
@@ -144,13 +144,13 @@ export function ExecutionCharts({
         <div className="rounded-lg border p-3">
           <p className="text-xs text-muted-foreground">Entrée moyenne</p>
           <p className="tnum mt-1 text-sm">
-            {number(trade.avgEntry, 5)} {currency}
+            {priceNumber(trade.avgEntry)} {currency}
           </p>
         </div>
         <div className="rounded-lg border p-3">
           <p className="text-xs text-muted-foreground">Sortie moyenne</p>
           <p className="tnum mt-1 text-sm">
-            {trade.avgExit == null ? "Aucune sortie" : `${number(trade.avgExit, 5)} ${currency}`}
+            {trade.avgExit == null ? "Aucune sortie" : `${priceNumber(trade.avgExit)} ${currency}`}
           </p>
         </div>
         <div className="rounded-lg border p-3">
@@ -192,7 +192,7 @@ export function ExecutionCharts({
                     fontSize="11"
                     fill="var(--muted-foreground)"
                   >
-                    {number(price, 5)}
+                    {priceNumber(price)}
                   </text>
                 </g>
               );
@@ -292,7 +292,7 @@ export function ExecutionCharts({
             <div>
               <dt className="text-xs text-muted-foreground">Prix</dt>
               <dd className="tnum mt-1">
-                {number(selected.price, 5)} {currency}
+                {priceNumber(selected.price)} {currency}
               </dd>
             </div>
             <div>
@@ -317,7 +317,7 @@ export function ExecutionCharts({
             onClick={() => setSelectedId(event.id)}
             className={`rounded-md border px-3 py-2 text-xs ${selected?.id === event.id ? "border-brand bg-brand/10" : "hover:bg-secondary"}`}
           >
-            {event.kind === "entry" ? "Entrée" : "Sortie"} {index + 1} · {number(event.price, 5)}
+            {event.kind === "entry" ? "Entrée" : "Sortie"} {index + 1} · {priceNumber(event.price)}
           </button>
         ))}
       </div>

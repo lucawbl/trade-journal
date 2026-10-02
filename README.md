@@ -294,3 +294,12 @@ Trade Journal reports and analyzes what your broker reports. Nothing it computes
 ## License
 
 Code is licensed under [MIT](LICENSE) © [LuxAlgo Global, LLC](https://luxalgo.com). The project name and LuxAlgo marks are covered by the [trademark policy](TRADEMARKS.md). Security reports: see [SECURITY.md](SECURITY.md).
+
+### Connected demo bots
+
+`POST /api/bot-ingest` accepts an optional `accountId`: `bybit-demo-doge`
+(default, existing sender), `binance-testnet-pepe`, or `binance-testnet-btc`.
+Each account accepts only its matching USDT symbol. The bearer ingest secret is
+required. Binance Testnet bot accounts have an initial balance of zero because
+no independent initial bot capital has been supplied; this is not broker equity.
+The shared Binance wallet balance is not duplicated across bot accounts.

@@ -5,9 +5,14 @@ import { bad, handler, ok } from "@/server/api";
 import { insertExecutions } from "@/server/executions";
 import { nowIso } from "@/server/ids";
 
-const ACCOUNT_ID = "bybit-demo-doge";
+const BOT_ACCOUNTS = {
+  "bybit-demo-doge": { name: "DOGE Bot · Bybit Demo", broker: "bybit-demo", symbol: "DOGEUSDT", initialBalance: 50000 },
+  "binance-testnet-pepe": { name: "PEPE Bot · Binance Testnet", broker: "binance-testnet", symbol: "PEPEUSDT", initialBalance: 0 },
+  "binance-testnet-btc": { name: "BTC Bot · Binance Testnet", broker: "binance-testnet", symbol: "BTCUSDT", initialBalance: 0 },
+} as const;
 
 interface Body {
+  accountId?: string;
   executions?: ImportedExecution[];
 }
 
@@ -23,20 +28,26 @@ export const POST = handler(
       return bad("A non-empty executions array is required");
     }
 
+    const accountId = body.accountId ?? "bybit-demo-doge";
+    if (!Object.hasOwn(BOT_ACCOUNTS, accountId)) return bad("Unknown bot account");
+    const config = BOT_ACCOUNTS[accountId as keyof typeof BOT_ACCOUNTS];
+    if (body.executions.some((row) => !row || String(row.symbol ?? "").trim().toUpperCase() !== config.symbol))
+      return bad("Execution symbol does not match the bot account");
+
     const existing = db
       .select({ id: accounts.id })
       .from(accounts)
-      .where(eq(accounts.id, ACCOUNT_ID))
+      .where(eq(accounts.id, accountId))
       .get();
     if (!existing) {
       db.insert(accounts)
         .values({
-          id: ACCOUNT_ID,
-          name: "DOGE Bot · Bybit Demo",
-          broker: "bybit-demo",
+          id: accountId,
+          name: config.name,
+          broker: config.broker,
           kind: "manual",
           currency: "USDT",
-          initialBalance: 50000,
+          initialBalance: config.initialBalance,
           profitCalcMethod: "fifo",
           autoSync: false,
           createdAt: nowIso(),
@@ -53,12 +64,12 @@ export const POST = handler(
       fee: row.fee ?? 0,
     }));
 
-    const result = insertExecutions(ACCOUNT_ID, rows, "sync", undefined, { preserveFees: true });
+    const result = insertExecutions(accountId, rows, "sync", undefined, { preserveFees: true });
     // Retries with valid duplicate fills also confirm the bot is still reaching us.
     if (result.inserted + result.duplicates > 0) {
-      db.update(accounts).set({ lastSyncAt: nowIso() }).where(eq(accounts.id, ACCOUNT_ID)).run();
+      db.update(accounts).set({ lastSyncAt: nowIso() }).where(eq(accounts.id, accountId)).run();
     }
-    return ok({ accountId: ACCOUNT_ID, ...result });
+    return ok({ accountId: accountId, ...result });
   },
   { public: true },
 );

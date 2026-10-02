@@ -1,3 +1,4 @@
+import { priceNumber } from "@/lib/journal-format";
 import { notFound } from "next/navigation";
 import { ExecutionCharts } from "@/components/execution-charts";
 import {
@@ -63,7 +64,7 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
           <div>
             <dt className="text-xs text-muted-foreground">Prix moyen entrée / sortie</dt>
             <dd className="tnum mt-1">
-              {number(row.avgEntry, 5)} / {number(row.avgExit, 5)}
+              {priceNumber(row.avgEntry)} / {priceNumber(row.avgExit)}
             </dd>
           </div>
           <div>
@@ -112,7 +113,7 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
                   <td className="py-3 pr-4">{timestamp(fill.executedAt, view.timeZone)}</td>
                   <td className="pr-4">{fill.side === "buy" ? "Achat" : "Vente"}</td>
                   <td className="tnum pr-4">{number(fill.quantity, 4)}</td>
-                  <td className="tnum pr-4">{number(fill.price, 5)}</td>
+                  <td className="tnum pr-4">{priceNumber(fill.price)}</td>
                   <td className="tnum pr-4">
                     {number(fill.fee, 5)} {currency}
                   </td>

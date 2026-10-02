@@ -24,3 +24,7 @@ export function timestamp(value: string | null, timeZone: string) {
   const part = (key: string) => parts.find((item) => item.type === key)?.value ?? "";
   return `${part("day")}.${part("month")}.${part("year")} · ${part("hour")}:${part("minute")}`;
 }
+
+/** Keep small token prices visible without scientific notation. */
+export const priceNumber = (value: number | null | undefined) =>
+  number(value, value != null && Math.abs(value) > 0 && Math.abs(value) < 0.001 ? 10 : 5);

@@ -62,6 +62,23 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 describe("server-rendered journal", () => {
+  it("isolates PEPE and BTC from DOGE and rejects mismatched symbols", async () => {
+    const post = (accountId: string, symbol: string) => POST(new Request("http://localhost/api/bot-ingest", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer test-ingest-secret" },
+      body: JSON.stringify({ accountId, executions: fills.map(fill => ({ ...fill, symbol })) }),
+    }));
+    await ingest();
+    expect((await post("binance-testnet-pepe", "PEPEUSDT")).status).toBe(200);
+    expect((await post("binance-testnet-btc", "BTCUSDT")).status).toBe(200);
+    expect(readJournalView().accounts).toHaveLength(3);
+    expect(readJournalView({ accounts: "binance-testnet-pepe" }).rows[0]?.symbol).toBe("PEPEUSDT");
+    expect((await post("binance-testnet-pepe", "BTCUSDT")).status).toBe(400);
+    expect((await post("arbitrary", "BTCUSDT")).status).toBe(400);
+    const retry = await post("binance-testnet-btc", "BTCUSDT");
+    expect(await retry.json()).toMatchObject({ inserted: 0, duplicates: 2 });
+    expect(db.select().from(executions).all()).toHaveLength(6);
+  });
+
   it("keeps partial exits separate from closed-trade performance and filters consistently", async () => {
     expect((await ingest()).status).toBe(200);
     const view = readJournalView();

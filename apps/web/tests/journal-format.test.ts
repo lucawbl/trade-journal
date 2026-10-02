@@ -15,3 +15,9 @@ describe("consistent formatting across server and browser", () => {
     expect(timestamp("invalid", "UTC")).toBe("—");
   });
 });
+
+it("keeps PEPE prices distinct and nonzero", async () => {
+  const { priceNumber } = await import("../src/lib/journal-format");
+  expect(priceNumber(0.0000045)).toBe("0,0000045000");
+  expect(priceNumber(0.00000431)).not.toBe(priceNumber(0.0000045));
+});
