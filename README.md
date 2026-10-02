@@ -324,3 +324,13 @@ connection mode and last reception time. Pausing or hiding the tab stops the
 feed; reconnecting reloads the rolling 300-candle window. Chart zoom is preserved
 across feed updates. Trade pages retain an independent historical replay mode.
 Market data access is read-only and never changes bot orders or strategy.
+
+### Dedicated market workspace
+
+`/market` is the full-width market page, linked from the main navigation and the
+dashboard. It supports coin/timeframe links, a larger responsive chart, native
+fullscreen (with an expanded-overlay fallback) and an explicit zoom reset.
+Live chart updates merge data into the existing ECharts instance without
+reapplying dataZoom. While dragging or using wheel zoom, chart redraws wait
+until the gesture ends and then apply the latest received data; the quote feed
+continues independently.

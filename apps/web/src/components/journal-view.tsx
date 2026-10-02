@@ -20,9 +20,11 @@ export function JournalShell({
   title,
   active,
   children,
+  wide = false,
 }: {
   title: string;
-  active: "dashboard" | "trades" | "accounts" | "reports" | "calendar";
+  active: "dashboard" | "trades" | "accounts" | "reports" | "calendar" | "market";
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -50,6 +52,7 @@ export function JournalShell({
             {(
               [
                 ["dashboard", "/", "Dashboard"],
+                ["market", "/market", "Marché"],
                 ["trades", "/trades", "Trades"],
                 ["accounts", "/accounts", "Accounts"],
                 ["reports", "/reports", "Rapports"],
@@ -68,7 +71,10 @@ export function JournalShell({
           </nav>
         </div>
       </header>
-      <div id="journal-content" className="mx-auto max-w-7xl space-y-6 px-4 py-7 sm:px-8">
+      <div
+        id="journal-content"
+        className={`mx-auto ${wide ? "max-w-[1920px]" : "max-w-7xl"} space-y-6 px-4 py-7 sm:px-8`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="mb-1 text-xs uppercase tracking-widest text-brand">Journal des bots</p>
@@ -78,10 +84,12 @@ export function JournalShell({
             Environnement démo
           </span>
         </div>
-        <JournalRefresh />
+        {active !== "market" && <JournalRefresh />}
         {children}
         <footer className="border-t pt-4 text-xs text-muted-foreground">
-          Données du journal SQLite · Activez l’actualisation automatique pour suivre les nouvelles exécutions.
+          {active === "market"
+            ? "Marché Binance Spot · Données en direct, sans passage d’ordres."
+            : "Données du journal SQLite · Activez l’actualisation automatique pour suivre les nouvelles exécutions."}
         </footer>
       </div>
     </main>

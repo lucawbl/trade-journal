@@ -18,12 +18,14 @@ export function CandleCanvas({
   levels,
   timeZone,
   livePrice,
+  large = false,
 }: {
   history: MarketHistory;
   events: Events;
   levels: ReturnType<typeof riskTimeline>;
   timeZone: string;
   livePrice?: number;
+  large?: boolean;
 }) {
   const bars = history.bars;
   const step = RESOLUTIONS[history.resolution];
@@ -53,6 +55,7 @@ export function CandleCanvas({
     animation: false,
     color: ["#34d399", "#60a5fa", "#fb923c", "#f87171", "#34d399"],
     legend: {
+      type: "scroll",
       top: 0,
       textStyle: { color: "#a1a1aa" },
       data: [
@@ -81,7 +84,7 @@ export function CandleCanvas({
       splitLine: { lineStyle: { color: "#27272a" } },
     },
     dataZoom: [
-      { type: "inside", start: 0, end: 100 },
+      { type: "inside", start: livePrice != null ? 60 : 0, end: 100 },
       {
         type: "slider",
         bottom: 8,
@@ -150,7 +153,16 @@ export function CandleCanvas({
               silent: true,
               lineStyle: { color: "#38bdf8", type: "dashed" as const, width: 1 },
               itemStyle: { color: "#38bdf8" },
-              endLabel: { show: true, color: "#38bdf8", formatter: () => priceNumber(livePrice) },
+              endLabel: {
+                show: true,
+                color: "#38bdf8",
+                backgroundColor: "#0f172a",
+                padding: [3, 5],
+                distance: -8,
+                align: "right" as const,
+                verticalAlign: "bottom" as const,
+                formatter: () => priceNumber(livePrice),
+              },
             },
           ]
         : []),
@@ -159,11 +171,15 @@ export function CandleCanvas({
   return (
     <div className="overflow-x-auto">
       <div
-        className="min-w-[640px]"
+        className={large ? "min-w-0" : "min-w-[640px]"}
         role="img"
         aria-label={`Graphique en bougies ${history.symbol}${livePrice != null ? ` en direct, cours ${priceNumber(livePrice)} USDT` : ""}${events.length ? ", achats et ventes" : ""}${levels.length ? ", stop-loss et take-profit de référence" : ""}.`}
       >
-        <EChart option={option} height={440} preserveZoom />
+        <EChart
+          option={option}
+          height={large ? "clamp(420px, calc(100dvh - 240px), 1200px)" : 440}
+          preserveZoom
+        />
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLiveMarket } from "@/hooks/use-live-market";
 import { LIVE_SYMBOLS, type LiveSymbol } from "@/lib/live-market";
 import type { Resolution } from "@/lib/market-data";
@@ -22,19 +22,65 @@ export function LiveMarketChart({
   timeZone,
   events = EMPTY_EVENTS,
   levels = EMPTY_LEVELS,
+  initialResolution = "1m",
+  large = false,
 }: {
   initialSymbol?: LiveSymbol;
+  initialResolution?: Resolution;
+  large?: boolean;
   locked?: boolean;
   timeZone: string;
   events?: ReturnType<typeof executionChart>["events"];
   levels?: ReturnType<typeof riskTimeline>;
 }) {
   const [symbol, setSymbol] = useState(initialSymbol);
-  const [resolution, setResolution] = useState<Resolution>("1m");
+  const [resolution, setResolution] = useState<Resolution>(initialResolution);
   const [enabled, setEnabled] = useState(true);
+  const [viewReset, setViewReset] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement === host.current);
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.fullscreenElement) setFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", changed);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("fullscreenchange", changed);
+      document.removeEventListener("keydown", escape);
+    };
+  }, []);
+  useEffect(() => {
+    if (!large || window.location.pathname !== "/market") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("resolution", resolution);
+    window.history.replaceState(window.history.state, "", url);
+  }, [symbol, resolution, large]);
+  const toggleFullscreen = async () => {
+    if (fullscreen) {
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      setFullscreen(false);
+    } else {
+      setFullscreen(true);
+      try {
+        await host.current?.requestFullscreen?.();
+      } catch {
+        /* Expanded overlay for browsers without native fullscreen. */
+      }
+    }
+  };
   const { snapshot, status, error, receivedAt } = useLiveMarket(symbol, resolution, enabled);
   return (
-    <div className="space-y-4">
+    <div
+      ref={host}
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 space-y-4 overflow-auto bg-background p-3 sm:p-6"
+          : "space-y-4"
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-3">
           <label className="text-sm">
@@ -69,14 +115,40 @@ export function LiveMarketChart({
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          aria-pressed={!enabled}
-          onClick={() => setEnabled((value) => !value)}
-          className="rounded-md border px-3 py-2 text-sm hover:bg-secondary"
-        >
-          {enabled ? "Mettre en pause" : "Reprendre le direct"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewReset((value) => value + 1)}
+            className="rounded-md border px-3 py-2 text-sm hover:bg-secondary"
+          >
+            Réinitialiser le zoom
+          </button>
+          {large ? (
+            <button
+              type="button"
+              aria-pressed={fullscreen}
+              onClick={toggleFullscreen}
+              className="rounded-md border px-3 py-2 text-sm hover:bg-secondary"
+            >
+              {fullscreen ? "Quitter le plein écran" : "Plein écran"}
+            </button>
+          ) : (
+            <a
+              href={`/market?symbol=${symbol}&resolution=${resolution}`}
+              className="rounded-md border px-3 py-2 text-sm text-brand hover:bg-secondary"
+            >
+              Agrandir dans Marché ↗
+            </a>
+          )}
+          <button
+            type="button"
+            aria-pressed={!enabled}
+            onClick={() => setEnabled((value) => !value)}
+            className="rounded-md border px-3 py-2 text-sm hover:bg-secondary"
+          >
+            {enabled ? "Mettre en pause" : "Reprendre le direct"}
+          </button>
+        </div>
       </div>
       <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border p-4">
         <div>
@@ -115,11 +187,13 @@ export function LiveMarketChart({
       )}
       {snapshot ? (
         <CandleCanvas
+          key={`${symbol}:${resolution}:${viewReset}`}
           history={snapshot}
           events={events}
           levels={levels}
           timeZone={timeZone}
           livePrice={snapshot.price}
+          large={large || fullscreen}
         />
       ) : (
         <p role="status" className="py-8 text-sm">

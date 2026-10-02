@@ -1,4 +1,3 @@
-import { LiveMarketChart } from "@/components/live-market-chart";
 import {
   EquityChart,
   JournalShell,
@@ -21,9 +20,13 @@ export default async function DashboardPage() {
   return (
     <JournalShell title="Vue d’ensemble" active="dashboard">
       <SummaryMetrics view={view} />
-      <Panel title="Cours des cryptos en direct">
-        <LiveMarketChart timeZone={view.timeZone} />
-      </Panel>
+      <a
+        href="/market"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 text-sm hover:bg-secondary"
+      >
+        <span>Marché en direct · DOGE, PEPE et BTC</span>
+        <span className="font-medium text-brand">Ouvrir le grand graphique →</span>
+      </a>
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Panel title="Évolution du P&L clôturé">
