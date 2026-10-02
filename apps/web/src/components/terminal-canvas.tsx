@@ -2,7 +2,12 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
 import { CandlestickChart, ScatterChart } from "echarts/charts";
-import { DataZoomComponent, MarkLineComponent, GraphicComponent } from "echarts/components";
+import {
+  MarkAreaComponent,
+  DataZoomComponent,
+  MarkLineComponent,
+  GraphicComponent,
+} from "echarts/components";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./charts/echart";
 import {
@@ -23,8 +28,10 @@ import type { MarketHistory } from "@/lib/market-data";
 import { RESOLUTIONS } from "@/lib/market-data";
 import { number, priceNumber, timestamp } from "@/lib/journal-format";
 import type { executionChart } from "@/lib/execution-chart";
+import { riskZones } from "@/lib/risk-zones";
 import type { riskTimeline } from "@/lib/bot-risk";
 echarts.use([
+  MarkAreaComponent,
   CandlestickChart,
   ScatterChart,
   DataZoomComponent,
@@ -504,6 +511,12 @@ export function TerminalCanvas({
         name: "SL de référence",
         type: "line",
         data: risk("stopLoss"),
+        markArea: {
+          silent: true,
+          label: { show: false },
+          itemStyle: { color: "#f2364522", borderColor: "#f2364566", borderWidth: 1 },
+          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss"),
+        },
         step: "end",
         showSymbol: false,
         lineStyle: { color: "#f23645", type: "dashed" },
@@ -513,6 +526,12 @@ export function TerminalCanvas({
         name: "TP de référence",
         type: "line",
         data: risk("takeProfit"),
+        markArea: {
+          silent: true,
+          label: { show: false },
+          itemStyle: { color: "#08998122", borderColor: "#08998166", borderWidth: 1 },
+          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit"),
+        },
         step: "end",
         showSymbol: false,
         lineStyle: { color: "#089981", type: "dashed" },

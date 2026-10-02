@@ -1,16 +1,23 @@
 "use client";
 import * as echarts from "echarts/core";
 import { CandlestickChart, ScatterChart } from "echarts/charts";
-import { DataZoomComponent, LegendComponent } from "echarts/components";
+import { MarkAreaComponent, DataZoomComponent, LegendComponent } from "echarts/components";
 import type { EChartsOption } from "echarts";
 import { EChart } from "./charts/echart";
 import type { MarketHistory } from "@/lib/market-data";
 import { RESOLUTIONS } from "@/lib/market-data";
 import { number, priceNumber, timestamp } from "@/lib/journal-format";
+import { riskZones } from "@/lib/risk-zones";
 import type { riskTimeline } from "@/lib/bot-risk";
 import type { executionChart } from "@/lib/execution-chart";
 
-echarts.use([CandlestickChart, ScatterChart, DataZoomComponent, LegendComponent]);
+echarts.use([
+  MarkAreaComponent,
+  CandlestickChart,
+  ScatterChart,
+  DataZoomComponent,
+  LegendComponent,
+]);
 type Events = ReturnType<typeof executionChart>["events"];
 export function CandleCanvas({
   history,
@@ -127,6 +134,12 @@ export function CandleCanvas({
         name: "SL de référence",
         type: "line",
         data: level("stopLoss"),
+        markArea: {
+          silent: true,
+          label: { show: false },
+          itemStyle: { color: "#f2364522", borderColor: "#f2364566", borderWidth: 1 },
+          data: riskZones(bars, step, levels, "stopLoss"),
+        },
         step: "end",
         showSymbol: false,
         connectNulls: false,
@@ -137,6 +150,12 @@ export function CandleCanvas({
         name: "TP de référence",
         type: "line",
         data: level("takeProfit"),
+        markArea: {
+          silent: true,
+          label: { show: false },
+          itemStyle: { color: "#08998122", borderColor: "#08998166", borderWidth: 1 },
+          data: riskZones(bars, step, levels, "takeProfit"),
+        },
         step: "end",
         showSymbol: false,
         connectNulls: false,

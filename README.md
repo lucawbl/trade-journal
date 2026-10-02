@@ -370,3 +370,7 @@ across page navigation; background tabs remain paused.
 The dashboard distinguishes closed results from the total realized result,
 including partial exits and recorded fees. Bot cards show closed results and
 a quantity-remaining meter (not a profit or capital-allocation percentage).
+
+Trade charts shade the reference entry-to-SL area red and entry-to-TP area green.
+Zones follow position intervals, update with average entry and stop at full closure.
+These are current bot strategy references, not historical placed stop orders.
