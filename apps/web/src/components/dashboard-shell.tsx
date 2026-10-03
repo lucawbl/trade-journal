@@ -32,7 +32,7 @@ export function DashboardShell({
             </span>
           </div>
         </div>
-        {active !== "/trades" && <JournalRefresh />}
+        <JournalRefresh hidden />
         {children}
         <footer className="border-t pt-4 text-xs text-muted-foreground">
           Résultats après frais enregistrés. Les gains clôturés et les sorties partielles restent

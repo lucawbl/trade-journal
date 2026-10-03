@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-export function JournalRefresh() {
+export function JournalRefresh({ hidden = false }: { hidden?: boolean }) {
   const router = useRouter();
   const [automatic, setAutomatic] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -35,6 +35,7 @@ export function JournalRefresh() {
     return () => window.clearInterval(timer);
   }, [automatic, pending, router]);
 
+  if (hidden) return null;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 text-xs">
       <button
