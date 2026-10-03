@@ -525,7 +525,6 @@ export function MarketTerminal({
             ["/market", "Marché"],
             ["/trades", "Historique"],
             ["/accounts", "Comptes"],
-            ["/reports", "Bilan"],
             ["/calendar", "Par jour"],
           ].map(([href, label]) => (
             <a key={href} href={href}>
@@ -694,11 +693,22 @@ export function MarketTerminal({
               Connexion au marché…
             </p>
           )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground" aria-label="Légende du graphique">
-            <span><span className="text-sky-400">▲</span> Entrée</span>
-            <span><span className="text-amber-400">◆</span> Sortie</span>
-            <span><span className="text-loss">■</span> Stop loss</span>
-            <span><span className="text-profit">■</span> Take profit</span>
+          <div
+            className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground"
+            aria-label="Légende du graphique"
+          >
+            <span>
+              <span className="text-sky-400">▲</span> Entrée
+            </span>
+            <span>
+              <span className="text-amber-400">◆</span> Sortie
+            </span>
+            <span>
+              <span className="text-loss">■</span> Stop loss
+            </span>
+            <span>
+              <span className="text-profit">■</span> Take profit
+            </span>
           </div>
           {tradeHistory && (
             <button

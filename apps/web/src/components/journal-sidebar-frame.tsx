@@ -6,7 +6,6 @@ import {
   ChartNoAxesCombined,
   History,
   Wallet,
-  ChartColumn,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -18,7 +17,6 @@ const navigation = [
   { href: "/market", label: "Marché", icon: ChartNoAxesCombined },
   { href: "/trades", label: "Historique", icon: History },
   { href: "/accounts", label: "Comptes", icon: Wallet },
-  { href: "/reports", label: "Bilan", icon: ChartColumn },
   { href: "/calendar", label: "Par jour", icon: CalendarDays },
 ];
 

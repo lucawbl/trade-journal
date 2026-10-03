@@ -7,16 +7,21 @@ export function JournalFilters({
   filters,
   month,
   closedOnly = false,
+  extraFields = {},
 }: {
   action: string;
   accounts: JournalView["accounts"];
   filters: AnalysisFilters;
   month?: string;
   closedOnly?: boolean;
+  extraFields?: Record<string, string>;
 }) {
   const inputClass = "mt-1 min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm";
   return (
     <form action={action} method="get" className="grid grid-cols-2 items-end gap-3 lg:grid-cols-4">
+      {Object.entries(extraFields).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
       {month && <input type="hidden" name="month" value={month} />}
       {closedOnly && <input type="hidden" name="status" value="closed" />}
       <label className="min-w-0 text-xs text-muted-foreground">
@@ -96,7 +101,11 @@ export function JournalFilters({
         Appliquer
       </button>
       <a
-        href={month ? `${action}?month=${month}` : action}
+        href={
+          month || Object.keys(extraFields).length
+            ? `${action}?${new URLSearchParams({ ...extraFields, ...(month ? { month } : {}) })}`
+            : action
+        }
         className="px-3 py-2 text-center text-sm text-muted-foreground hover:text-foreground"
       >
         Réinitialiser

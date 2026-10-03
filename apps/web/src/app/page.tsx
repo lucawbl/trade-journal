@@ -1,3 +1,5 @@
+import { DashboardReport } from "@/components/dashboard-report";
+import { DashboardTabs } from "@/components/dashboard-tabs";
 import { dailyStats } from "@luxalgo/journal-core";
 import { ResultBars } from "@/components/history-analysis";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -14,8 +16,20 @@ import { priceNumber } from "@/lib/journal-format";
 import { tradePath } from "@/lib/trade-links";
 import { readJournalView, requireJournalSession } from "@/server/journal-view";
 export const dynamic = "force-dynamic";
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireJournalSession();
+  const params = await searchParams;
+  if (params.view === "bilan")
+    return (
+      <DashboardShell>
+        <DashboardTabs active="bilan" />
+        <DashboardReport params={params} />
+      </DashboardShell>
+    );
   const view = readJournalView(),
     m = view.overview.metrics;
   const currency = view.currencyScope.currency ?? "";
@@ -28,6 +42,7 @@ export default async function DashboardPage() {
   const accountMap = new Map(view.accounts.map((account) => [account.id, account]));
   return (
     <DashboardShell>
+      <DashboardTabs active="overview" />
       <div className="dashboard-grid">
         <div className="dashboard-equity">
           <Panel title="Évolution du résultat clôturé">
