@@ -274,6 +274,9 @@ export function TerminalCanvas({
     );
   const marks = (kind: "entry" | "exit") =>
     chartMarkers(bars, RESOLUTIONS[history.resolution], events, kind);
+  const markerSize = events.length > 40 ? 4 : 6;
+  const chartPrice = (value: number) =>
+    marketPrice(value).replace(/([,.]\d*?[1-9])0+$|[,.]0+$/, "$1");
   const risk = (key: "stopLoss" | "takeProfit") =>
     bars.map((b) => {
       const active = levels.findLast((e) => e.time < b.time + RESOLUTIONS[history.resolution]);
@@ -313,10 +316,8 @@ export function TerminalCanvas({
         cell("Histogramme", priceNumber(mc.histogram[index]));
     else
       content =
-        cell("Ouverture", marketPrice(bar.open)) +
-        cell("Clôture", marketPrice(bar.close)) +
-        cell("Plus haut", marketPrice(bar.high)) +
-        cell("Plus bas", marketPrice(bar.low));
+        cell("Cours", chartPrice(bar.close)) +
+        cell("Variation de la bougie", `${number((bar.close / bar.open - 1) * 100, 2)} %`);
     const fills = events.filter(
       (e) =>
         Math.floor(e.time / RESOLUTIONS[history.resolution]) * RESOLUTIONS[history.resolution] ===
@@ -327,7 +328,7 @@ export function TerminalCanvas({
       hoverAxis.current === 0 && fills.length
         ? `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #343c4c;color:#a6b4c8;font-size:11px">${count("entry")} entrée(s) · ${count("exit")} sortie(s)</div>`
         : "";
-    return `<div style="width:210px;max-width:100%;font-variant-numeric:tabular-nums"><div style="font-weight:600;margin-bottom:2px">${paneNames[hoverAxis.current] ?? "Cours"}</div><div style="color:#8f9bad;font-size:11px;margin-bottom:8px">${times[index]}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">${content}</div>${tradeRow}</div>`;
+    return `<div style="width:185px;max-width:100%;font-variant-numeric:tabular-nums"><div style="font-weight:600;margin-bottom:2px">${paneNames[hoverAxis.current] ?? "Cours"}</div><div style="color:#8f9bad;font-size:11px;margin-bottom:8px">${times[index]}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">${content}</div>${tradeRow}</div>`;
   };
   const label = { color: "#858b99", fontSize: 11, hideOverlap: true };
   const axes = [0, 1, 2, 3, 4].map((gridIndex) => ({
@@ -414,12 +415,13 @@ export function TerminalCanvas({
         min: (bounds) => Math.max(bounds.min * 0.99, bounds.min - (bounds.max - bounds.min) * 0.07),
         max: (bounds) => bounds.max + (bounds.max - bounds.min) * 0.07,
         position: "right",
-        axisLabel: { ...label, formatter: marketPrice },
+        splitNumber: 4,
+        axisLabel: { ...label, formatter: chartPrice },
         axisPointer: {
           snap: false,
           label: {
             show: tool === "cursor",
-            formatter: (params: { value: unknown }) => marketPrice(Number(params.value)),
+            formatter: (params: { value: unknown }) => chartPrice(Number(params.value)),
           },
         },
         splitLine: { lineStyle: { color: "#14171d" } },
@@ -515,7 +517,7 @@ export function TerminalCanvas({
         type: "line",
         data: indicators.wma ? wma(bars, period) : [],
         showSymbol: false,
-        lineStyle: { color: "#2962ff", width: 2, shadowColor: "#2962ff", shadowBlur: 7 },
+        lineStyle: { color: "#2962ff", width: 1.5 },
       },
       {
         id: "volume",
@@ -644,9 +646,9 @@ export function TerminalCanvas({
         type: "scatter",
         data: marks("entry"),
         symbol: "triangle",
-        symbolOffset: [0, 7],
-        symbolSize: 7,
-        itemStyle: { color: "#00c8ff" },
+        symbolOffset: [0, 6],
+        symbolSize: markerSize,
+        itemStyle: { color: "#38bdf8", opacity: 0.7 },
         z: 8,
       },
       {
@@ -655,9 +657,9 @@ export function TerminalCanvas({
         type: "scatter",
         data: marks("exit"),
         symbol: "diamond",
-        symbolOffset: [0, -7],
-        symbolSize: 7,
-        itemStyle: { color: "#ffab40" },
+        symbolOffset: [0, -6],
+        symbolSize: markerSize,
+        itemStyle: { color: "#fbbf24", opacity: 0.7 },
         z: 8,
       },
       {
@@ -677,7 +679,7 @@ export function TerminalCanvas({
               return value?.name ?? "SL";
             },
           },
-          itemStyle: { color: "#f2364518", borderColor: "#f2364550", borderWidth: 1 },
+          itemStyle: { color: "#f2364512", borderColor: "#f2364535", borderWidth: 1 },
           data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss").map(
             ([start, end]) => [{ ...start, name: "SL visuel · " + priceNumber(end.yAxis) }, end],
           ),
@@ -703,7 +705,7 @@ export function TerminalCanvas({
               return value?.name ?? "TP";
             },
           },
-          itemStyle: { color: "#08998118", borderColor: "#08998150", borderWidth: 1 },
+          itemStyle: { color: "#08998112", borderColor: "#08998135", borderWidth: 1 },
           data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit").map(
             ([start, end]) => [{ ...start, name: "TP visuel · " + priceNumber(end.yAxis) }, end],
           ),
@@ -722,7 +724,7 @@ export function TerminalCanvas({
         lineStyle: { color: "#089981", type: "dotted", width: 1 },
         endLabel: {
           show: true,
-          formatter: marketPrice(price),
+          formatter: chartPrice(price),
           color: "#fff",
           backgroundColor: "#089981",
           padding: [3, 5],
@@ -767,7 +769,7 @@ export function TerminalCanvas({
             {number(comparison.change, 2)} %
           </strong>
           <div className="text-xs text-muted-foreground">
-            {marketPrice(comparison.from)} → {marketPrice(comparison.to)}
+            {chartPrice(comparison.from)} → {chartPrice(comparison.to)}
           </div>
         </div>
       )}

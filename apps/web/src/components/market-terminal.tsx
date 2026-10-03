@@ -694,6 +694,12 @@ export function MarketTerminal({
               Connexion au marché…
             </p>
           )}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground" aria-label="Légende du graphique">
+            <span><span className="text-sky-400">▲</span> Entrée</span>
+            <span><span className="text-amber-400">◆</span> Sortie</span>
+            <span><span className="text-loss">■</span> Stop loss</span>
+            <span><span className="text-profit">■</span> Take profit</span>
+          </div>
           {tradeHistory && (
             <button
               className={s.button}
