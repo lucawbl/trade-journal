@@ -1,6 +1,8 @@
 import { JournalFilters } from "@/components/journal-filters";
 import { readFilters } from "@luxalgo/journal-core";
-import { JournalShell, Panel, SummaryMetrics, TradeTable } from "@/components/journal-view";
+import { JournalShell, Panel, SummaryMetrics } from "@/components/journal-view";
+import { HistoryAnalysis } from "@/components/history-analysis";
+import { HistoryTrades } from "@/components/history-trades";
 import { readJournalView, requireJournalSession } from "@/server/journal-view";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +16,7 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
   const view = readJournalView(filters);
   const exportQuery = new URLSearchParams({ ...filters, format: "csv" }).toString();
   return (
-    <JournalShell title="Historique des trades" active="trades">
+    <JournalShell title="Historique & analyses" active="trades">
       <Panel title="Filtrer l’historique">
         <JournalFilters action="/trades" accounts={view.accounts} filters={filters} />
         <p className="mt-3 text-xs text-muted-foreground">
@@ -30,11 +32,12 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
         </a>
       </div>
       <SummaryMetrics view={view} />
+      <HistoryAnalysis view={view} />
       <Panel title={`${view.rows.length} trade${view.rows.length === 1 ? "" : "s"}`}>
-        <TradeTable view={view} />
+        <HistoryTrades view={view} />
         <p className="mt-4 text-xs text-muted-foreground">
-          Cliquez sur un symbole pour voir les exécutions. Le P&L des sorties partielles n’entre
-          dans les statistiques clôturées qu’à la clôture complète.
+          Déplie un trade pour voir ses détails et accéder aux exécutions. Le P&L des sorties
+          partielles n’entre dans les statistiques clôturées qu’à la clôture complète.
         </p>
       </Panel>
     </JournalShell>

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { JournalRefresh } from "./journal-refresh";
+import { DashboardShell } from "./dashboard-shell";
 import type { EquityPoint } from "@luxalgo/journal-core";
 import type { JournalView } from "@/server/journal-view";
 import { tradePath } from "@/lib/trade-links";
@@ -27,72 +27,18 @@ export function JournalShell({
   wide?: boolean;
   children: ReactNode;
 }) {
+  const paths = {
+    dashboard: "/",
+    trades: "/trades",
+    accounts: "/accounts",
+    reports: "/reports",
+    calendar: "/calendar",
+    market: "/market",
+  };
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <a href="#journal-content" className="sr-only focus:not-sr-only focus:block focus:p-4">
-        Aller au contenu
-      </a>
-      <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-8">
-          <div className="flex items-center gap-3 font-semibold">
-            <span aria-hidden="true" className="rounded-lg bg-brand/15 px-3 py-2 text-brand">
-              TJ
-            </span>
-            <span>
-              Trade Journal
-              <span className="block text-xs font-normal text-muted-foreground">
-                Suivi de trading · Comptes démo
-              </span>
-            </span>
-          </div>
-          <nav
-            aria-label="Navigation principale"
-            className="flex max-w-full flex-wrap gap-1 rounded-lg border p-1 text-sm"
-          >
-            {(
-              [
-                ["dashboard", "/", "Dashboard"],
-                ["market", "/market", "Marché"],
-                ["trades", "/trades", "Historique"],
-                ["accounts", "/accounts", "Comptes"],
-                ["reports", "/reports", "Bilan"],
-                ["calendar", "/calendar", "Par jour"],
-              ] as const
-            ).map(([key, href, label]) => (
-              <a
-                key={key}
-                href={href}
-                aria-current={active === key ? "page" : undefined}
-                className={`rounded-md px-3 py-2 ${active === key ? "bg-secondary font-medium" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-        </div>
-      </header>
-      <div
-        id="journal-content"
-        className={`mx-auto ${wide ? "max-w-[1920px]" : "max-w-7xl"} space-y-6 px-4 py-7 sm:px-8`}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="mb-1 text-xs uppercase tracking-widest text-brand">Journal des bots</p>
-            <h1 className="text-2xl font-semibold sm:text-3xl">{title}</h1>
-          </div>
-          <span className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs text-brand">
-            Environnement démo
-          </span>
-        </div>
-        {active !== "market" && <JournalRefresh />}
-        {children}
-        <footer className="border-t pt-4 text-xs text-muted-foreground">
-          {active === "market"
-            ? "Marché Binance Spot · Données en direct, sans passage d’ordres."
-            : "Les résultats incluent les frais enregistrés. Les positions ouvertes restent séparées des résultats clôturés."}
-        </footer>
-      </div>
-    </main>
+    <DashboardShell title={title} active={paths[active]} wide={wide}>
+      {children}
+    </DashboardShell>
   );
 }
 
