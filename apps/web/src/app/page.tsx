@@ -1,4 +1,6 @@
 import { DashboardReport } from "@/components/dashboard-report";
+import { DashboardAccounts } from "@/components/dashboard-accounts";
+import { DashboardCalendar } from "@/components/dashboard-calendar";
 import { DashboardTabs } from "@/components/dashboard-tabs";
 import { dailyStats } from "@luxalgo/journal-core";
 import { ResultBars } from "@/components/history-analysis";
@@ -23,11 +25,13 @@ export default async function DashboardPage({
 }) {
   await requireJournalSession();
   const params = await searchParams;
-  if (params.view === "bilan")
+  if (params.view === "bilan" || params.view === "accounts" || params.view === "calendar")
     return (
       <DashboardShell>
-        <DashboardTabs active="bilan" />
-        <DashboardReport params={params} />
+        <DashboardTabs active={params.view} />
+        {params.view === "bilan" && <DashboardReport params={params} />}
+        {params.view === "accounts" && <DashboardAccounts />}
+        {params.view === "calendar" && <DashboardCalendar params={params} />}
       </DashboardShell>
     );
   const view = readJournalView(),

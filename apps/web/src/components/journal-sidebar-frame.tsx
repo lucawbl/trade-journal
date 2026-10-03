@@ -5,8 +5,7 @@ import {
   LayoutDashboard,
   ChartNoAxesCombined,
   History,
-  Wallet,
-  CalendarDays,
+  Bot,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -16,8 +15,7 @@ const navigation = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/market", label: "Marché", icon: ChartNoAxesCombined },
   { href: "/trades", label: "Historique", icon: History },
-  { href: "/accounts", label: "Comptes", icon: Wallet },
-  { href: "/calendar", label: "Par jour", icon: CalendarDays },
+  { href: "/bot", label: "Bot", icon: Bot },
 ];
 
 export function JournalSidebarFrame({

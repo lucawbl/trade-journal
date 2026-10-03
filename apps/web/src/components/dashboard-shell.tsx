@@ -8,11 +8,13 @@ export function DashboardShell({
   title = "Dashboard",
   active = "/",
   wide = false,
+  description,
 }: {
   children: ReactNode;
   title?: string;
   active?: string;
   wide?: boolean;
+  description?: string;
 }) {
   return (
     <JournalSidebarFrame active={active}>
@@ -23,12 +25,19 @@ export function DashboardShell({
       >
         <div className={styles.heading}>
           <div>
-            <p>{active === "/trades" ? "ANALYSE DES TRADES" : "JOURNAL DES BOTS"}</p>
+            <p>
+              {active === "/trades"
+                ? "ANALYSE DES TRADES"
+                : active === "/bot"
+                  ? "ATELIER DU BOT"
+                  : "JOURNAL DES BOTS"}
+            </p>
             <h1>{title}</h1>
             <span>
-              {active === "/trades"
-                ? "Comprends tes résultats et retrouve chaque trade."
-                : "Les résultats de tes bots, en un coup d’œil."}
+              {description ??
+                (active === "/trades"
+                  ? "Comprends tes résultats et retrouve chaque trade."
+                  : "Les résultats de tes bots, en un coup d’œil.")}
             </span>
           </div>
         </div>
