@@ -381,6 +381,9 @@ keep separate entry bases and closure boundaries. Only trades intersecting the
 loaded candle period appear; older trades remain available in their detail chart.
 
 Risk rectangles use a visual Binance candle anchor and preserve the bot risk
-percentages. If the entry is outside the loaded history, the first visible candle
-is the disclosed fallback anchor. This changes visual references only, never
+percentages. If the entry is outside the loaded history, load the trade period to show its zone. This changes visual references only, never
 actual execution prices or orders.
+
+Position rectangles now keep one fixed entry anchor per trade through partial
+exits. Missing entry candles are never replaced by the first visible candle.
+Use See position on chart in the trade panel to load the actual trade period.

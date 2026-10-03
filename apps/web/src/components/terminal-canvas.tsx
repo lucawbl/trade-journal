@@ -53,6 +53,7 @@ export function TerminalCanvas({
   levels,
   timeZone,
   height,
+  fullPeriod = false,
   onReady,
   onDraw,
   onMeasure,
@@ -69,6 +70,7 @@ export function TerminalCanvas({
   levels: ReturnType<typeof riskTimeline>;
   timeZone: string;
   height: string;
+  fullPeriod?: boolean;
   onReady: (chart: TerminalChart) => void;
   onDraw: (drawing: Drawing) => void;
   onMeasure: (text: string) => void;
@@ -307,7 +309,7 @@ export function TerminalCanvas({
       {
         type: "inside",
         xAxisIndex: [0, 1, 2, 3, 4],
-        start: 60,
+        start: fullPeriod ? 0 : 60,
         end: 100,
         filterMode: "none",
         zoomOnMouseWheel: tool === "cursor",

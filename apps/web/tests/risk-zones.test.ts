@@ -12,15 +12,11 @@ it("ends zones at full closure instead of extending into live candles", () => {
     ],
   ]);
 });
-it("keeps partial positions shaded and updates the average entry basis", () => {
+it("keeps one fixed position rectangle through partial exits", () => {
   expect(riskZones(bars, 60, [event(0, 2), event(60, 1, 110, 99, 132)], "takeProfit")).toEqual([
     [
       { xAxis: 0, yAxis: 100 },
-      { xAxis: 0, yAxis: 120 },
-    ],
-    [
-      { xAxis: 1, yAxis: 110 },
-      { xAxis: 3, yAxis: 132 },
+      { xAxis: 3, yAxis: 120 },
     ],
   ]);
 });
@@ -61,4 +57,15 @@ it("anchors visual zones to the crypto candle while preserving risk percentages"
     ],
   ]);
   expect(riskZones(candles, 60, [event(0, 2)], "stopLoss")[0]?.[1].yAxis).toBe(45);
+});
+
+it("does not relocate an old trade onto the first visible candle", () => {
+  expect(
+    riskZones(
+      bars.map((bar) => ({ ...bar, open: 50 })),
+      60,
+      [event(-120, 2)],
+      "stopLoss",
+    ),
+  ).toEqual([]);
 });

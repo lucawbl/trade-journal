@@ -94,12 +94,38 @@ export function MarketTerminal({
     [replayIndex, setReplayIndex] = useState(0),
     [playing, setPlaying] = useState(false);
   const [selectedTrade, setSelectedTrade] = useState("");
+  const [tradeHistory, setTradeHistory] = useState<LiveSnapshot | null>(null);
+  const [tradeLoading, setTradeLoading] = useState(false);
+  const showTrade = async () => {
+    if (!selected || tradeLoading) return;
+    setTradeLoading(true);
+    try {
+      const response = await fetch(`/api/trades/${encodeURIComponent(selected.key)}/chart`);
+      const data = await response.json();
+      if (!response.ok || !data.bars?.length)
+        throw new Error(data.error ?? "Aucune bougie disponible");
+      setPlaying(false);
+      setReplay(null);
+      setResolution(data.resolution);
+      setTradeHistory({
+        ...data,
+        price: data.bars.at(-1).close,
+        changePct: 0,
+        marketTime: Date.now(),
+      });
+      setNotice("Période du trade affichée. Les rectangles partent de sa bougie d’entrée.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Historique indisponible");
+    } finally {
+      setTradeLoading(false);
+    }
+  };
   const chart = useRef<TerminalChart | null>(null),
     host = useRef<HTMLDivElement>(null);
   const { snapshot, status, error, receivedAt } = useLiveMarket(
     symbol,
     resolution,
-    enabled && !replay,
+    enabled && !replay && !tradeHistory,
   );
   const symbolTrades = trades.filter((t) => t.symbol === symbol);
   const selected =
@@ -216,16 +242,18 @@ export function MarketTerminal({
   }, [snapshot, symbol, enabled, replay]);
   const history = useMemo(
     () =>
-      replay && replay.symbol === symbol && replay.resolution === resolution
-        ? {
-            ...replay,
-            bars: replay.bars.slice(0, replayIndex),
-            price: replay.bars[Math.max(0, replayIndex - 1)]?.close ?? replay.price,
-          }
-        : snapshot?.symbol === symbol && snapshot.resolution === resolution
-          ? snapshot
-          : null,
-    [snapshot, replay, replayIndex, symbol, resolution],
+      tradeHistory && tradeHistory.symbol === symbol && tradeHistory.resolution === resolution
+        ? tradeHistory
+        : replay && replay.symbol === symbol && replay.resolution === resolution
+          ? {
+              ...replay,
+              bars: replay.bars.slice(0, replayIndex),
+              price: replay.bars[Math.max(0, replayIndex - 1)]?.close ?? replay.price,
+            }
+          : snapshot?.symbol === symbol && snapshot.resolution === resolution
+            ? snapshot
+            : null,
+    [snapshot, replay, replayIndex, symbol, resolution, tradeHistory],
   );
   const triggered = alerts.filter((a) => a.triggered);
   const toggleFullscreen = async () => {
@@ -586,7 +614,7 @@ export function MarketTerminal({
               {history ? priceNumber(history.price) : "—"} USDT
             </span>
             <span className={history && history.changePct < 0 ? s.down : s.up}>
-              {history && !replay
+              {history && !replay && !tradeHistory
                 ? `${history.changePct >= 0 ? "+" : ""}${number(history.changePct, 2)} %`
                 : "Cours historique"}
             </span>
@@ -597,12 +625,12 @@ export function MarketTerminal({
             </span>
             <span className={s.spacer} />
             <span className={s.muted} data-live-status>
-              {replay ? "Replay" : status}
+              {tradeHistory ? "Historique du trade" : replay ? "Replay" : status}
             </span>
           </div>
           {history ? (
             <Canvas
-              key={`${symbol}:${resolution}`}
+              key={`${symbol}:${resolution}:${tradeHistory?.fetchedAt ?? "live"}`}
               history={history}
               price={history.price}
               period={period}
@@ -615,6 +643,7 @@ export function MarketTerminal({
               levels={symbolTrades.flatMap((trade) => trade.levels)}
               timeZone={timeZone}
               height={chartHeight}
+              fullPeriod={!!tradeHistory}
               onReady={(c) => {
                 chart.current = c;
               }}
@@ -625,6 +654,11 @@ export function MarketTerminal({
             <p role="status" style={{ height: chartHeight, padding: 30 }}>
               Connexion au marché…
             </p>
+          )}
+          {tradeHistory && (
+            <button className={s.button} onClick={() => setTradeHistory(null)}>
+              Retour au cours en direct
+            </button>
           )}
           <div className={s.range}>
             <button className={s.button} onClick={() => range(0)}>
@@ -687,6 +721,13 @@ export function MarketTerminal({
                     )}
                   </select>
                 </label>
+                <button
+                  className={s.button}
+                  disabled={tradeLoading || !selected}
+                  onClick={showTrade}
+                >
+                  {tradeLoading ? "Chargement…" : "Voir la position sur le graphique"}
+                </button>
                 <button className={s.button} onClick={() => router.refresh()}>
                   Actualiser les trades
                 </button>
@@ -716,9 +757,9 @@ export function MarketTerminal({
               )}
               <p className={`${s.muted} mt-3`}>
                 ▲ Entrées · ◆ Sorties · Rectangles SL rouge / TP vert ancrés au cours Binance
-                (bougie d’entrée, ou première bougie visible si l’entrée est hors période), calculés
-                avec les paramètres actuels du bot. Les exécutions démo/testnet peuvent différer des
-                prix Binance Spot.
+                (bougie d’entrée réelle ; chargez la période du trade si elle est hors écran),
+                calculés avec les paramètres actuels du bot. Les exécutions démo/testnet peuvent
+                différer des prix Binance Spot.
               </p>
             </section>
           )}
