@@ -158,7 +158,7 @@ export function MarketTradeHistory({
           if (!open) setSelected(null);
         }}
       >
-        <DialogContent container={container} className="max-w-5xl">
+        <DialogContent container={container} className="grid-cols-1 max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {selected?.symbol.replace("USDT", " / USDT")} ·{" "}
@@ -211,7 +211,7 @@ export function MarketTradeHistory({
                   <dd className="mt-1">{detail.executions.length}</dd>
                 </div>
               </dl>
-              <details className="rounded-lg border p-3 text-xs" open>
+              <details className="min-w-0 rounded-lg border p-3 text-xs" open>
                 <summary className="cursor-pointer font-medium">
                   Achats et ventes · {detail.executions.length}
                 </summary>
