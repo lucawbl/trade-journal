@@ -28,6 +28,7 @@ import type { MarketHistory } from "@/lib/market-data";
 import { RESOLUTIONS } from "@/lib/market-data";
 import { number, priceNumber, timestamp } from "@/lib/journal-format";
 import type { executionChart } from "@/lib/execution-chart";
+import { chartMarkers } from "@/lib/chart-markers";
 import { riskZones } from "@/lib/risk-zones";
 import type { riskTimeline } from "@/lib/bot-risk";
 echarts.use([
@@ -146,19 +147,7 @@ export function TerminalCanvas({
         Math.floor(time / RESOLUTIONS[history.resolution]) * RESOLUTIONS[history.resolution],
     );
   const marks = (kind: "entry" | "exit") =>
-    events
-      .filter((e) => e.kind === kind)
-      .flatMap((e) => {
-        const i = findIndex(e.time);
-        return i < 0
-          ? []
-          : [
-              {
-                value: [i, e.price],
-                name: `${kind === "entry" ? "Achat / entrée" : "Vente / sortie"} · ${priceNumber(e.price)}`,
-              },
-            ];
-      });
+    chartMarkers(bars, RESOLUTIONS[history.resolution], events, kind);
   const risk = (key: "stopLoss" | "takeProfit") =>
     bars.map((b) => {
       const active = levels.findLast((e) => e.time < b.time + RESOLUTIONS[history.resolution]);
@@ -494,7 +483,8 @@ export function TerminalCanvas({
         type: "scatter",
         data: marks("entry"),
         symbol: "triangle",
-        symbolSize: 12,
+        symbolOffset: [0, 7],
+        symbolSize: 7,
         itemStyle: { color: "#00c8ff" },
         z: 8,
       },
@@ -504,7 +494,8 @@ export function TerminalCanvas({
         type: "scatter",
         data: marks("exit"),
         symbol: "diamond",
-        symbolSize: 12,
+        symbolOffset: [0, -7],
+        symbolSize: 7,
         itemStyle: { color: "#ffab40" },
         z: 8,
       },
@@ -525,7 +516,7 @@ export function TerminalCanvas({
               return value?.name ?? "SL";
             },
           },
-          itemStyle: { color: "#f2364525", borderColor: "#f2364599", borderWidth: 1 },
+          itemStyle: { color: "#f2364518", borderColor: "#f2364550", borderWidth: 1 },
           data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss").map(
             ([start, end]) => [{ ...start, name: "SL visuel · " + priceNumber(end.yAxis) }, end],
           ),
@@ -551,7 +542,7 @@ export function TerminalCanvas({
               return value?.name ?? "TP";
             },
           },
-          itemStyle: { color: "#08998125", borderColor: "#08998199", borderWidth: 1 },
+          itemStyle: { color: "#08998118", borderColor: "#08998150", borderWidth: 1 },
           data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit").map(
             ([start, end]) => [{ ...start, name: "TP visuel · " + priceNumber(end.yAxis) }, end],
           ),

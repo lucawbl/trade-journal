@@ -7,6 +7,7 @@ import { EChart } from "./charts/echart";
 import type { MarketHistory } from "@/lib/market-data";
 import { RESOLUTIONS } from "@/lib/market-data";
 import { number, priceNumber, timestamp } from "@/lib/journal-format";
+import { chartMarkers } from "@/lib/chart-markers";
 import { riskZones } from "@/lib/risk-zones";
 import type { riskTimeline } from "@/lib/bot-risk";
 import type { executionChart } from "@/lib/execution-chart";
@@ -38,20 +39,7 @@ export function CandleCanvas({
   const step = RESOLUTIONS[history.resolution];
   const times = bars.map((bar) => timestamp(new Date(bar.time).toISOString(), timeZone));
   const indices = new Map(bars.map((bar, index) => [bar.time, index]));
-  const executions = (kind: "entry" | "exit") =>
-    events
-      .filter((event) => event.kind === kind)
-      .flatMap((event) => {
-        const index = indices.get(Math.floor(event.time / step) * step);
-        return index == null
-          ? []
-          : [
-              {
-                value: [index, event.price],
-                name: `${kind === "entry" ? "Entrée" : "Sortie"} · ${timestamp(event.executedAt, timeZone)} · ${number(event.quantity, 8)} unités`,
-              },
-            ];
-      });
+  const executions = (kind: "entry" | "exit") => chartMarkers(bars, step, events, kind);
   const level = (key: "stopLoss" | "takeProfit") =>
     bars.map((bar) => {
       const active = levels.findLast((event) => event.time < bar.time + step);
@@ -117,7 +105,8 @@ export function CandleCanvas({
         type: "scatter",
         data: executions("entry"),
         symbol: "triangle",
-        symbolSize: 11,
+        symbolOffset: [0, 7],
+        symbolSize: 7,
         itemStyle: { color: "#60a5fa" },
         z: 5,
       },
@@ -126,7 +115,8 @@ export function CandleCanvas({
         type: "scatter",
         data: executions("exit"),
         symbol: "diamond",
-        symbolSize: 11,
+        symbolOffset: [0, -7],
+        symbolSize: 7,
         itemStyle: { color: "#fb923c" },
         z: 5,
       },
@@ -146,7 +136,7 @@ export function CandleCanvas({
               return value?.name ?? "SL";
             },
           },
-          itemStyle: { color: "#f2364525", borderColor: "#f2364599", borderWidth: 1 },
+          itemStyle: { color: "#f2364518", borderColor: "#f2364550", borderWidth: 1 },
           data: riskZones(bars, step, levels, "stopLoss").map(
             ([start, end]): [typeof start & { name: string }, typeof end] => [
               { ...start, name: "SL visuel · " + priceNumber(end.yAxis) },
@@ -176,7 +166,7 @@ export function CandleCanvas({
               return value?.name ?? "TP";
             },
           },
-          itemStyle: { color: "#08998125", borderColor: "#08998199", borderWidth: 1 },
+          itemStyle: { color: "#08998118", borderColor: "#08998150", borderWidth: 1 },
           data: riskZones(bars, step, levels, "takeProfit").map(
             ([start, end]): [typeof start & { name: string }, typeof end] => [
               { ...start, name: "TP visuel · " + priceNumber(end.yAxis) },

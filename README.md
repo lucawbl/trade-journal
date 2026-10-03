@@ -395,3 +395,7 @@ automatic candle resolution. Return to live remains available from the chart.
 The overlay now draws a separate visual risk block for every entry fill, even
 within one bot position. Each block extends to the next fill, with a minimum
 one-candle width for readability; that boundary is not a claim of full closure.
+
+Entry/exit markers are compact and anchored below/above their Binance candles.
+Multiple executions of the same kind in one candle share one marker, while the
+hover summary retains their count. Risk shading and borders use lower contrast.
