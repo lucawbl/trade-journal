@@ -808,10 +808,10 @@ export function MarketTerminal({
                 </>
               )}
               <p className={`${s.muted} mt-3`}>
-                ▲ Entrées · ◆ Sorties · Rectangles SL rouge / TP vert ancrés au cours Binance
-                (bougie d’entrée réelle ; chargez la période du trade si elle est hors écran),
-                calculés avec les paramètres actuels du bot. Les exécutions démo/testnet peuvent
-                différer des prix Binance Spot.
+                ▲ Entrées · ◆ Sorties · Un bloc SL/TP par achat, jusqu’à l’exécution suivante
+                (repère visuel). Rectangles ancrés au cours Binance (bougie d’entrée réelle ;
+                chargez la période du trade si elle est hors écran), calculés avec les paramètres
+                actuels du bot. Les exécutions démo/testnet peuvent différer des prix Binance Spot.
               </p>
             </section>
           )}

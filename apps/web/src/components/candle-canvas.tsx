@@ -137,7 +137,7 @@ export function CandleCanvas({
         markArea: {
           silent: true,
           label: {
-            show: true,
+            show: levels.filter((event) => event.kind === "entry").length <= 5,
             position: "insideTopRight",
             color: "#f23645",
             fontSize: 11,
@@ -167,7 +167,7 @@ export function CandleCanvas({
         markArea: {
           silent: true,
           label: {
-            show: true,
+            show: levels.filter((event) => event.kind === "entry").length <= 5,
             position: "insideTopRight",
             color: "#089981",
             fontSize: 11,

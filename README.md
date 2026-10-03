@@ -391,3 +391,7 @@ Use See position on chart in the trade panel to load the actual trade period.
 Positions du bot opens a common historical period for all trades in the selected
 symbol. It uses the existing authenticated chart route with scope=symbol and
 automatic candle resolution. Return to live remains available from the chart.
+
+The overlay now draws a separate visual risk block for every entry fill, even
+within one bot position. Each block extends to the next fill, with a minimum
+one-candle width for readability; that boundary is not a claim of full closure.

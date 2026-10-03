@@ -17,28 +17,31 @@ export function riskZones(
     group.push(event);
     groups.set(key, group);
   }
-  return [...groups.values()].flatMap((group) => {
-    const entry = group[0];
-    if (!entry || entry.position <= 1e-10) return [];
-    const entryIndex = bars.findIndex(
-      (bar) => bar.time <= entry.time && bar.time + step > entry.time,
-    );
-    // Never invent a new entry when the actual entry candle is outside the loaded period.
-    if (entryIndex < 0 && bars.some((bar) => bar.open != null)) return [];
-    const anchor = entryIndex >= 0 ? (bars[entryIndex]?.open ?? entry.basis) : entry.basis;
-    const closure = group.find((event) => event.position <= 1e-10);
-    const end = Math.min(closure?.time ?? last, last);
-    if (end <= first || entry.time >= last) return [];
-    const left = Math.max(0, entryIndex);
-    const right = Math.max(
-      left,
-      bars.findLastIndex((bar) => bar.time < end),
-    );
-    return [
-      [
-        { xAxis: left, yAxis: anchor },
-        { xAxis: right, yAxis: (anchor * entry[key]) / entry.basis },
-      ] as [{ xAxis: number; yAxis: number }, { xAxis: number; yAxis: number }],
-    ];
-  });
+  return [...groups.values()].flatMap((group) =>
+    group.flatMap((entry, index) => {
+      if (entry.kind !== "entry" || entry.position <= 1e-10) return [];
+      const entryIndex = bars.findIndex(
+        (bar) => bar.time <= entry.time && bar.time + step > entry.time,
+      );
+      if (entryIndex < 0 && bars.some((bar) => bar.open != null)) return [];
+      const anchor = entryIndex >= 0 ? (bars[entryIndex]?.open ?? entry.basis) : entry.basis;
+      // Separate every entry signal: the next fill bounds this visual block, not an invented order closure.
+      const end = Math.min(group[index + 1]?.time ?? last, last);
+      if (end <= first || entry.time >= last || end <= entry.time) return [];
+      const left = Math.max(0, entryIndex);
+      const right = Math.min(
+        bars.length - 1,
+        Math.max(
+          left + 1,
+          bars.findLastIndex((bar) => bar.time < end),
+        ),
+      );
+      return [
+        [
+          { xAxis: left, yAxis: anchor },
+          { xAxis: right, yAxis: (anchor * entry[key]) / entry.basis },
+        ] as [{ xAxis: number; yAxis: number }, { xAxis: number; yAxis: number }],
+      ];
+    }),
+  );
 }
