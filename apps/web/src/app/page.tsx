@@ -83,7 +83,7 @@ export default async function DashboardPage() {
             <div
               className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full"
               style={{
-                background: `conic-gradient(#3abda0 ${(m.winRate ?? 0) * 360}deg, #edf1f8 0deg)`,
+                background: `conic-gradient(#3abda0 ${(m.winRate ?? 0) * 360}deg, var(--secondary) 0deg)`,
               }}
               aria-hidden="true"
             >

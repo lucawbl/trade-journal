@@ -1,15 +1,15 @@
 .shell {
-  --background: #eef1f8;
-  --foreground: #27334d;
-  --card: #ffffff;
-  --secondary: #edf1f8;
-  --muted-foreground: #64718a;
-  --border: #e2e8f2;
-  --brand: #4e79d4;
-  --profit: #16836b;
-  --loss: #d44c63;
-  --baseline: #cbd5e4;
-  color-scheme: light;
+  --background: #080b11;
+  --foreground: #e6edf7;
+  --card: #111722;
+  --secondary: #1c2534;
+  --muted-foreground: #99a8bf;
+  --border: #263246;
+  --brand: #6a9aee;
+  --profit: #3fc1a9;
+  --loss: #f26d83;
+  --baseline: #40506a;
+  color-scheme: dark;
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 205px minmax(0, 1fr);
@@ -17,7 +17,7 @@
   color: var(--foreground);
 }
 .sidebar {
-  background: #647699;
+  background: #111b2b;
   color: #eef3ff;
   padding: 28px 17px;
   display: flex;
@@ -80,7 +80,7 @@
 }
 .header {
   min-height: 66px;
-  background: #ffffff80;
+  background: #0e1520;
   border-bottom: 1px solid var(--border);
   padding: 15px 30px 15px 65px;
   display: flex;
@@ -92,9 +92,9 @@
 }
 .badge {
   padding: 6px 10px;
-  background: #e5ecfa;
+  background: #1b2b44;
   border-radius: 6px;
-  color: #4b6ca4;
+  color: #9abcf4;
   white-space: nowrap;
 }
 .content {
@@ -130,7 +130,7 @@
 }
 .shell :global(.card-sheen),
 .shell :global(.dashboard-bots article) {
-  box-shadow: 0 4px 18px #43598408;
+  box-shadow: 0 4px 18px #00000020;
   border-radius: 10px;
 }
 .shell :global(.card-sheen)::before,
@@ -241,7 +241,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--brand);
-  box-shadow: 0 2px 8px #3445640c;
+  box-shadow: 0 2px 8px #00000030;
 }
 .toggle:focus-visible {
   outline: 2px solid var(--brand);
@@ -261,7 +261,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: #1a263950;
+  background: #03060bbb;
 }
 @media (max-width: 760px) {
   .toggle {
