@@ -1,0 +1,335 @@
+.studio {
+  width: 100%;
+  max-width: 900px;
+  min-width: 0;
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.botSelection {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand);
+}
+.botSelection select {
+  min-width: 0;
+  max-width: 220px;
+  padding: 8px 24px 8px 5px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 600;
+}
+.botSelection select:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.connectionStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.connectionStatus > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.workspace,
+.chat {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.workspace {
+  gap: 12px;
+}
+.messages {
+  min-height: min(42dvh, 340px);
+  max-height: min(52dvh, 480px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.empty {
+  margin: auto 0;
+  padding: 18px 10px;
+  text-align: center;
+}
+.assistantIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
+  border-radius: 14px;
+  background: #6a9aee15;
+  color: var(--brand);
+}
+.empty h2 {
+  font-size: clamp(19px, 3vw, 25px);
+  line-height: 1.3;
+  font-weight: 600;
+}
+.empty > p {
+  margin: 10px auto 0;
+  max-width: 450px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 22px;
+}
+.prompts button {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.prompts button:hover,
+.prompts button:focus-visible {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.prompts button:disabled {
+  opacity: 0.5;
+}
+.userMessage,
+.assistantMessage {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.userMessage {
+  max-width: 85%;
+  align-self: flex-end;
+  border-radius: 20px 20px 5px 20px;
+  padding: 10px 16px;
+  background: #6a9aee1a;
+}
+.assistantMessage {
+  max-width: 96%;
+  align-self: flex-start;
+  padding: 0 4px;
+}
+.userMessage p,
+.assistantMessage p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.messageMode {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.composerArea {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding: 12px 0 max(10px, env(safe-area-inset-bottom));
+  background: var(--background);
+}
+.composer {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: var(--card);
+  padding: 8px 10px 8px 18px;
+}
+.composer:focus-within {
+  border-color: var(--brand);
+}
+.composer textarea {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 10px 0;
+  resize: none;
+  overflow-y: auto;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font-size: 16px;
+  line-height: 24px;
+}
+.composer textarea::placeholder {
+  color: var(--muted-foreground);
+}
+.composer textarea:disabled {
+  opacity: 0.6;
+}
+.send {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #081224;
+}
+.send:disabled {
+  background: var(--secondary);
+  color: var(--muted-foreground);
+}
+.send:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 3px;
+}
+.composerNote {
+  padding-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+.panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.panelSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+.panelSummary::-webkit-details-marker {
+  display: none;
+}
+.panel[open] > .panelSummary > svg,
+.panel[open] > .panelSummary > .summaryEnd > svg {
+  transform: rotate(180deg);
+}
+.summaryEnd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panelContent {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+.proposal {
+  border-color: #6a9aee60;
+}
+.proposalLevels,
+.currentMetrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.proposalLevels > div {
+  display: grid;
+  gap: 6px;
+}
+.proposalMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.proposalMetrics strong {
+  margin-left: 4px;
+  color: var(--foreground);
+  font-weight: 600;
+}
+.explanation {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.explanation summary {
+  cursor: pointer;
+}
+.explanation p {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.currentMetrics dt {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.currentMetrics dt:global(.text-loss) {
+  color: var(--loss);
+}
+.currentMetrics dt:global(.text-profit) {
+  color: var(--profit);
+}
+.currentMetrics dd {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .messages {
+    min-height: min(33dvh, 270px);
+    max-height: min(44dvh, 400px);
+    gap: 16px;
+  }
+  .empty {
+    padding: 12px 0;
+  }
+  .assistantIcon {
+    margin-bottom: 10px;
+  }
+  .prompts {
+    margin-top: 16px;
+    gap: 6px;
+  }
+  .prompts button {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+  .botSelection select {
+    max-width: 130px;
+  }
+  .connectionStatus {
+    font-size: 10px;
+  }
+  .composer {
+    padding-left: 14px;
+  }
+  .panelSummary {
+    padding: 12px 14px;
+  }
+}
