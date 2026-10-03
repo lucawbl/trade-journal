@@ -62,7 +62,24 @@ export function CandleCanvas({
     grid: { left: 18, right: 115, top: 45, bottom: 70 },
     tooltip: {
       trigger: "axis",
-      axisPointer: { type: "cross" },
+      confine: true,
+      backgroundColor: "#161b24",
+      borderColor: "#343c4c",
+      textStyle: { color: "#d1d5db", fontSize: 11 },
+      axisPointer: {
+        type: "cross",
+        snap: false,
+        crossStyle: { color: "#8793a8", width: 1, type: "dashed" },
+        label: { backgroundColor: "#293241", fontSize: 10 },
+      },
+      formatter: (params) => {
+        const list = Array.isArray(params) ? params : [params];
+        const index = list.find((item) => typeof item.dataIndex === "number")?.dataIndex;
+        const bar = typeof index === "number" ? bars[index] : undefined;
+        return bar
+          ? `${times[index!]}<br/>O ${priceNumber(bar.open)} · C ${priceNumber(bar.close)}<br/>H ${priceNumber(bar.high)} · B ${priceNumber(bar.low)}`
+          : "";
+      },
       valueFormatter: (value) => (typeof value === "number" ? priceNumber(value) : String(value)),
     },
     xAxis: {

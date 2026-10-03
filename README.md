@@ -399,3 +399,7 @@ one-candle width for readability; that boundary is not a claim of full closure.
 Entry/exit markers are compact and anchored below/above their Binance candles.
 Multiple executions of the same kind in one candle share one marker, while the
 hover summary retains their count. Risk shading and borders use lower contrast.
+
+The chart cursor uses a thin crosshair with axis labels and a stationary compact
+hover card. Wheel zoom no longer triggers the card; pointer drag hides details
+until the gesture ends. Trade detail hover shows only the candle OHLC summary.

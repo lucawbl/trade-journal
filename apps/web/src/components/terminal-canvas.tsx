@@ -86,6 +86,7 @@ export function TerminalCanvas({
   }, [tool]);
   const bars = history.bars;
   const hoverAxis = useRef(0);
+  const dragging = useRef(false);
   const layout = indicatorLayout(indicators);
   const latest = useRef({ tool, bars, onDraw, onMeasure, onReady });
   latest.current = { tool, bars, onDraw, onMeasure, onReady };
@@ -105,14 +106,25 @@ export function TerminalCanvas({
           chart.containPixel({ gridIndex }, [event.clientX - rect.left, event.clientY - rect.top]),
         ) ?? 0;
     };
+    const down = () => {
+      dragging.current = true;
+      chart.dispatchAction({ type: "hideTip" });
+    };
+    const up = () => {
+      dragging.current = false;
+    };
+    chart.getDom().addEventListener("pointerdown", down, true);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
     chart.getDom().addEventListener("mousemove", hover, true);
     chart.getZr().on("click", (event) => {
       const state = latest.current;
-      if (
-        state.tool === "cursor" ||
-        !chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY])
-      )
+      if (state.tool === "cursor") {
+        if (chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]))
+          chart.dispatchAction({ type: "showTip", x: event.offsetX, y: event.offsetY });
         return;
+      }
+      if (!chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY])) return;
       const value = chart.convertFromPixel({ gridIndex: 0 }, [
         event.offsetX,
         event.offsetY,
@@ -137,7 +149,12 @@ export function TerminalCanvas({
         );
       }
     });
-    return () => chart.getDom().removeEventListener("mousemove", hover, true);
+    return () => {
+      chart.getDom().removeEventListener("mousemove", hover, true);
+      chart.getDom().removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+    };
   };
   const times = bars.map((b) => timestamp(new Date(b.time).toISOString(), timeZone));
   const findIndex = (time: number) =>
@@ -210,7 +227,11 @@ export function TerminalCanvas({
     show: gridIndex === 0 || layout.panes[gridIndex - 1]?.enabled,
     axisPointer: {
       show: gridIndex === 0 || !!layout.panes[gridIndex - 1]?.enabled,
-      label: { show: false },
+      label: {
+        show: tool === "cursor" && gridIndex === layout.lastAxis,
+        backgroundColor: "#293241",
+        fontSize: 10,
+      },
     },
     data: times,
     boundaryGap: true,
@@ -242,23 +263,34 @@ export function TerminalCanvas({
     tooltip: {
       show: tool === "cursor",
       trigger: "axis",
-      triggerOn: "mousemove|click|mousewheel",
+      triggerOn: "mousemove",
       confine: true,
       backgroundColor: "#161b24",
       borderColor: "#343c4c",
       textStyle: { color: "#d1d5db", fontSize: 12 },
-      axisPointer: { type: "line", axis: "x", label: { show: false } },
+      axisPointer: {
+        type: "cross",
+        snap: false,
+        lineStyle: { color: "#8793a8", width: 1, type: "dashed" },
+        crossStyle: { color: "#8793a8", width: 1, type: "dashed" },
+        label: {
+          show: true,
+          backgroundColor: "#293241",
+          color: "#e6edf7",
+          fontSize: 10,
+          padding: [3, 5],
+        },
+      },
       extraCssText:
         "max-width:235px;white-space:normal;pointer-events:none;box-shadow:0 4px 20px #0008;",
       formatter: (params) => {
+        if (dragging.current) return "";
         const list = Array.isArray(params) ? params : [params];
         const index = list.find((p) => typeof p.dataIndex === "number")?.dataIndex;
         return typeof index === "number" ? tooltipHtml(index) : "";
       },
-      position: (point, _params, _dom, _rect, size) => [
-        point[0] > size.viewSize[0] / 2
-          ? 8
-          : Math.max(8, size.viewSize[0] - size.contentSize[0] - 8),
+      position: (_point, _params, _dom, _rect, size) => [
+        Math.max(8, size.viewSize[0] - size.contentSize[0] - 98),
         8,
       ],
     },
@@ -272,6 +304,13 @@ export function TerminalCanvas({
         max: (bounds) => bounds.max + (bounds.max - bounds.min) * 0.07,
         position: "right",
         axisLabel: { ...label, formatter: marketPrice },
+        axisPointer: {
+          snap: false,
+          label: {
+            show: tool === "cursor",
+            formatter: (params: { value: unknown }) => marketPrice(Number(params.value)),
+          },
+        },
         splitLine: { lineStyle: { color: "#14171d" } },
       },
       ...[1, 2, 3, 4].map((gridIndex) => ({
@@ -292,6 +331,7 @@ export function TerminalCanvas({
         show: false,
         min: 0,
         max: Math.max(...bars.map((b) => b.volume)) * 5,
+        axisPointer: { show: false, label: { show: false } },
       },
     ],
     dataZoom: [
