@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { ArrowDownToLine, Bot, ChevronDown } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Bot, ChevronDown } from "lucide-react";
 import type {
   BotAssistantBot,
   BotAssistantState,
   BotRiskParameters,
 } from "@/lib/bot-assistant-contract";
-import { number, timestamp } from "@/lib/journal-format";
+import { number } from "@/lib/journal-format";
 import { useApi } from "@/lib/use-api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -222,11 +222,50 @@ function Results({ bot }: { bot: BotAssistantBot }) {
 
 export function BotStudio() {
   const { data, error, loading, refresh } = useApi<BotAssistantState>("/api/bot-assistant");
-  const [selected, setSelected] = useState("bybit-demo-doge");
-  const bot = data?.bots.find((item) => item.id === selected) ?? data?.bots[0];
+  const [view, setView] = useState<"analysis" | "edit">("analysis");
+  const [selected, setSelected] = useState("all");
+  const bots = data?.bots.filter((bot) => selected === "all" || bot.id === selected) ?? [];
   return (
     <TooltipProvider>
       <div className={styles.studio}>
+        <div className={styles.toolbar}>
+          <div className={styles.viewTabs} role="tablist" aria-label="Vues du bot">
+            <button
+              role="tab"
+              id="bot-analysis-tab"
+              aria-controls="bot-analysis"
+              aria-selected={view === "analysis"}
+              onClick={() => setView("analysis")}
+            >
+              Analyse
+            </button>
+            <button
+              role="tab"
+              id="bot-edit-tab"
+              aria-controls="bot-edit"
+              aria-selected={view === "edit"}
+              onClick={() => setView("edit")}
+            >
+              Modifier
+            </button>
+          </div>
+          <label htmlFor="bot-selection" className={styles.botSelection}>
+            <Bot size={17} aria-hidden="true" />
+            <span className="sr-only">Choisir les bots affichés</span>
+            <select
+              id="bot-selection"
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              <option value="all">Toutes les cryptos</option>
+              {data?.bots.map((bot) => (
+                <option key={bot.id} value={bot.id}>
+                  {bot.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {loading && !data && (
           <p role="status" className={styles.empty}>
             Lecture des bots…
@@ -240,32 +279,33 @@ export function BotStudio() {
             </Button>
           </div>
         )}
-        {bot && (
-          <>
-            <div className={styles.toolbar}>
-              <label htmlFor="bot-selection" className={styles.botSelection}>
-                <Bot size={17} aria-hidden="true" />
-                <span className="sr-only">Choisir le bot</span>
-                <select
-                  id="bot-selection"
-                  value={bot.id}
-                  onChange={(event) => setSelected(event.target.value)}
-                >
-                  {data?.bots.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {bot.current && (
-                <span className={styles.readAt} title="Réglages lus sur le bot">
-                  {timestamp(bot.current.fetchedAt, "UTC")}
-                </span>
-              )}
-            </div>
-            <BotWorkspace key={bot.id} bot={bot} />
-          </>
+        {data && (
+          <section
+            role="tabpanel"
+            id={view === "analysis" ? "bot-analysis" : "bot-edit"}
+            aria-labelledby={view === "analysis" ? "bot-analysis-tab" : "bot-edit-tab"}
+            className={styles.allBots}
+          >
+            {bots.map((bot) => (
+              <article key={bot.id} className={styles.botGroup} aria-label={`Bot ${bot.label}`}>
+                <div className={styles.botHeading}>
+                  <h2>{bot.label}</h2>
+                  <a href={`/market?symbol=${bot.symbol}`} aria-label={`Graphique ${bot.label}`}>
+                    Graphique <ArrowUpRight size={13} className="inline" aria-hidden="true" />
+                  </a>
+                </div>
+                {view === "analysis" ? (
+                  <>
+                    <Outcomes bot={bot} />
+                    <Results bot={bot} />
+                    <RiskDiagram risk={bot.current} title="SL / TP" />
+                  </>
+                ) : (
+                  <BotWorkspace bot={bot} />
+                )}
+              </article>
+            ))}
+          </section>
         )}
       </div>
     </TooltipProvider>
@@ -349,23 +389,21 @@ function BotWorkspace({ bot }: { bot: BotAssistantBot }) {
     setExported(true);
   };
   return (
-    <div className={styles.visualGrid}>
+    <div className={styles.editGrid}>
       <RiskDiagram risk={bot.current} title="SL / TP actuels" />
-      <Outcomes bot={bot} />
-      <Results bot={bot} />
       <section className={styles.card} aria-label="Comparer un brouillon">
         <div className={styles.cardHeading}>
-          <h2>Brouillon</h2>
+          <h2>Modifier SL / TP</h2>
           <span>Non appliqué</span>
         </div>
         <form className={styles.draftForm} onSubmit={compare}>
           <div className={styles.inputs}>
             <div>
-              <Label htmlFor="bot-sl" className="text-xs text-loss">
+              <Label htmlFor={`bot-sl-${bot.id}`} className="text-xs text-loss">
                 SL (%)
               </Label>
               <Input
-                id="bot-sl"
+                id={`bot-sl-${bot.id}`}
                 inputMode="decimal"
                 required
                 value={stopLoss}
@@ -373,11 +411,11 @@ function BotWorkspace({ bot }: { bot: BotAssistantBot }) {
               />
             </div>
             <div>
-              <Label htmlFor="bot-tp" className="text-xs text-profit">
+              <Label htmlFor={`bot-tp-${bot.id}`} className="text-xs text-profit">
                 TP (%)
               </Label>
               <Input
-                id="bot-tp"
+                id={`bot-tp-${bot.id}`}
                 inputMode="decimal"
                 required
                 value={takeProfit}
@@ -426,6 +464,27 @@ function BotWorkspace({ bot }: { bot: BotAssistantBot }) {
             partielles.
           </p>
         </details>
+      </section>
+      <section className={styles.card} aria-label="Entrées et sorties manuelles">
+        <div className={styles.cardHeading}>
+          <h2>Entrée / sortie</h2>
+          <span>Lecture seule</span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button variant="outline" disabled className="border-profit text-profit">
+            Acheter
+          </Button>
+          <Button variant="outline" disabled className="border-loss text-loss">
+            Vendre
+          </Button>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">Connexion aux commandes requise.</p>
+        <a
+          className="mt-3 inline-block text-xs text-brand"
+          href={`/ai?prompt=${encodeURIComponent(`Analyse les réglages du bot ${bot.label} (${bot.symbol}) : SL ${bot.current?.stopLossPct ?? "indisponible"} %, TP ${bot.current?.takeProfitPct ?? "indisponible"} %. Aide-moi à définir des conditions d’entrée et de sortie, sans appliquer de changement.`)}`}
+        >
+          Demander conseil à l’IA <ArrowUpRight size={13} className="inline" aria-hidden="true" />
+        </a>
       </section>
       {draft && (
         <div className={styles.draftPreview}>

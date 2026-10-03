@@ -17,20 +17,22 @@ import {
   Crosshair,
   Minus,
   Spline,
+  PencilRuler,
+  ArrowUpRight,
+  MoveVertical,
+  Square,
   Ruler,
   Trash2,
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  RefreshCw,
   X,
   Download,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { useLiveMarket } from "@/hooks/use-live-market";
 import { LIVE_SYMBOLS, type LiveSymbol, type LiveSnapshot } from "@/lib/live-market";
-import type { Resolution } from "@/lib/market-data";
+import { RESOLUTIONS, type Resolution } from "@/lib/market-data";
 import { number, priceNumber } from "@/lib/journal-format";
 import {
   INDICATOR_CATALOG,
@@ -41,7 +43,8 @@ import {
 } from "@/lib/terminal-indicators";
 import type { TerminalTrade } from "@/lib/terminal-types";
 import type { TerminalChart } from "./terminal-canvas";
-import { tradePath } from "@/lib/trade-links";
+import { isDrawing, percentAlertPrice, replayStart } from "@/lib/terminal-tools";
+import { MarketTradeHistory } from "./market-trade-history";
 import s from "./market-terminal.module.css";
 const Canvas = dynamic(() => import("./terminal-canvas").then((m) => m.TerminalCanvas), {
   ssr: false,
@@ -54,8 +57,6 @@ type Alert = {
   direction: "above" | "below";
   triggered: boolean;
 };
-const EMPTY: TerminalTrade["events"] = [];
-const NO_LEVELS: TerminalTrade["levels"] = [];
 export function MarketTerminal({
   initialSymbol,
   initialResolution,
@@ -67,7 +68,6 @@ export function MarketTerminal({
   trades: TerminalTrade[];
   timeZone: string;
 }) {
-  const router = useRouter();
   const [symbol, setSymbol] = useState(initialSymbol),
     [resolution, setResolution] = useState(initialResolution);
   const [enabled, setEnabled] = useState(true),
@@ -83,28 +83,40 @@ export function MarketTerminal({
     [redo, setRedo] = useState<Drawing[]>([]);
   const [loaded, setLoaded] = useState(false),
     [fullscreen, setFullscreen] = useState(false);
-  const [panel, setPanel] = useState(false),
-    [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState("");
+  const [drawingMenu, setDrawingMenu] = useState(false);
+  const historyRequest = useRef<AbortController | null>(null);
   const [alertDialog, setAlertDialog] = useState(false),
     [alertPrice, setAlertPrice] = useState(""),
+    [alertMode, setAlertMode] = useState<"price" | "percent">("percent"),
+    [alertPercent, setAlertPercent] = useState("2"),
+    [alertReference, setAlertReference] = useState<number | null>(null),
     [direction, setDirection] = useState<"above" | "below">("above"),
     [alerts, setAlerts] = useState<Alert[]>([]);
   const [replay, setReplay] = useState<LiveSnapshot | null>(null),
     [replayIndex, setReplayIndex] = useState(0),
     [playing, setPlaying] = useState(false);
-  const [selectedTrade, setSelectedTrade] = useState("");
+  const [replaySpeed, setReplaySpeed] = useState(1);
   const [tradeHistory, setTradeHistory] = useState<LiveSnapshot | null>(null);
   const [tradeLoading, setTradeLoading] = useState(false);
-  const showTrade = async () => {
-    if (!selected || tradeLoading) return;
+  const showTrade = async (trade: TerminalTrade) => {
+    historyRequest.current?.abort();
+    const controller = new AbortController();
+    historyRequest.current = controller;
+    setSymbol(trade.symbol as LiveSymbol);
+    setPositionOverview(false);
+    setPlaying(false);
+    setReplay(null);
+    setTradeHistory(null);
     setTradeLoading(true);
     try {
-      const response = await fetch(`/api/trades/${encodeURIComponent(selected.key)}/chart`);
+      const response = await fetch(`/api/trades/${encodeURIComponent(trade.key)}/chart`, {
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+      });
       const data = await response.json();
       if (!response.ok || !data.bars?.length)
         throw new Error(data.error ?? "Aucune bougie disponible");
-      setPlaying(false);
-      setReplay(null);
+      if (controller.signal.aborted) return;
       setResolution(data.resolution);
       setTradeHistory({
         ...data,
@@ -114,29 +126,22 @@ export function MarketTerminal({
       });
       setNotice("Période du trade affichée. Les rectangles partent de sa bougie d’entrée.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Historique indisponible");
+      if (!controller.signal.aborted)
+        setNotice(error instanceof Error ? error.message : "Historique indisponible");
     } finally {
-      setTradeLoading(false);
+      if (historyRequest.current === controller) {
+        historyRequest.current = null;
+        setTradeLoading(false);
+      }
     }
   };
   const chart = useRef<TerminalChart | null>(null),
     host = useRef<HTMLDivElement>(null);
-  const { snapshot, status, error, receivedAt } = useLiveMarket(
-    symbol,
-    resolution,
-    enabled && !replay && !tradeHistory,
-  );
+  const { snapshot, status, error, receivedAt } = useLiveMarket(symbol, resolution, enabled);
   const symbolTrades = trades.filter((t) => t.symbol === symbol);
-  const selected =
-    symbolTrades.find((t) => t.key === selectedTrade) ??
-    symbolTrades.find((t) => t.status === "open") ??
-    symbolTrades[0];
-  const [positionOverview, setPositionOverview] = useState(true);
+  const [positionOverview, setPositionOverview] = useState(false);
   useEffect(() => {
-    if (!positionOverview || !symbolTrades[0]) {
-      setTradeHistory(null);
-      return;
-    }
+    if (!positionOverview || !symbolTrades[0]) return;
     const controller = new AbortController();
     setTradeLoading(true);
     void fetch(`/api/trades/${encodeURIComponent(symbolTrades[0].key)}/chart?scope=symbol`, {
@@ -172,18 +177,7 @@ export function MarketTerminal({
           const valid: Record<string, Drawing[]> = {};
           for (const pair of LIVE_SYMBOLS)
             valid[pair] = Array.isArray(saved.drawings[pair])
-              ? saved.drawings[pair]
-                  .filter(
-                    (d: Drawing) =>
-                      ["trend", "horizontal", "measure"].includes(d.kind) &&
-                      Array.isArray(d.points) &&
-                      d.points.length > 0 &&
-                      d.points.length <= 2 &&
-                      d.points.every(
-                        (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite),
-                      ),
-                  )
-                  .slice(-100)
+              ? saved.drawings[pair].filter(isDrawing).slice(-100)
               : [];
           setDrawings(valid);
         }
@@ -223,18 +217,17 @@ export function MarketTerminal({
     url.searchParams.set("symbol", symbol);
     url.searchParams.set("resolution", resolution);
     window.history.replaceState(window.history.state, "", url);
-    chart.current = null;
     setRedo([]);
-    setReplay(null);
-    setPlaying(false);
     setTool("cursor");
   }, [symbol, resolution]);
   useEffect(() => {
-    const changed = () => setFullscreen(document.fullscreenElement === host.current);
+    const changed = () =>
+      setFullscreen(document.fullscreenElement === host.current?.closest("main"));
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (!document.fullscreenElement) setFullscreen(false);
         setTool("cursor");
+        setDrawingMenu(false);
         setNotice("");
       }
     };
@@ -256,12 +249,12 @@ export function MarketTerminal({
           }
           return i + 1;
         }),
-      700,
+      700 / replaySpeed,
     );
     return () => clearInterval(timer);
-  }, [playing, replay]);
+  }, [playing, replay, replaySpeed]);
   useEffect(() => {
-    if (!snapshot || !enabled || replay || snapshot.symbol !== symbol) return;
+    if (!snapshot || !enabled || snapshot.symbol !== symbol) return;
     setAlerts((previous) =>
       previous.map((a) =>
         a.symbol === symbol &&
@@ -271,34 +264,51 @@ export function MarketTerminal({
           : a,
       ),
     );
-  }, [snapshot, symbol, enabled, replay]);
+  }, [snapshot, symbol, enabled]);
   const history = useMemo(
     () =>
-      tradeHistory && tradeHistory.symbol === symbol && tradeHistory.resolution === resolution
-        ? tradeHistory
-        : replay && replay.symbol === symbol && replay.resolution === resolution
-          ? {
-              ...replay,
-              bars: replay.bars.slice(0, replayIndex),
-              price: replay.bars[Math.max(0, replayIndex - 1)]?.close ?? replay.price,
-            }
-          : snapshot?.symbol === symbol && snapshot.resolution === resolution
-            ? snapshot
-            : null,
+      replay && replay.symbol === symbol && replay.resolution === resolution
+        ? {
+            ...replay,
+            bars: replay.bars.slice(0, replayIndex),
+            price: replay.bars[Math.max(0, replayIndex - 1)]?.close ?? replay.price,
+          }
+        : tradeHistory && tradeHistory.symbol === symbol && tradeHistory.resolution === resolution
+          ? tradeHistory
+          : snapshot,
     [snapshot, replay, replayIndex, symbol, resolution, tradeHistory],
   );
   const triggered = alerts.filter((a) => a.triggered);
   const toggleFullscreen = async () => {
     if (fullscreen) {
-      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
       setFullscreen(false);
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
     } else {
       setFullscreen(true);
-      try {
-        await host.current?.requestFullscreen?.();
-      } catch {}
+      const frame = host.current?.closest("main");
+      // The application expands immediately; native fullscreen is optional on mobile browsers.
+      void frame?.requestFullscreen?.().catch(() => {});
     }
   };
+  const returnToLive = () => {
+    historyRequest.current?.abort();
+    setEnabled(true);
+    setPositionOverview(false);
+    setTradeHistory(null);
+    setTradeLoading(false);
+    setReplay(null);
+    setPlaying(false);
+    setNotice("");
+  };
+  const changeResolution = (value: Resolution) => {
+    returnToLive();
+    setResolution(value);
+  };
+  const changeSymbol = (value: LiveSymbol) => {
+    returnToLive();
+    setSymbol(value);
+  };
+  useEffect(() => () => historyRequest.current?.abort(), []);
   const getChart = () => (chart.current && !chart.current.isDisposed() ? chart.current : null);
   const zoom = (delta: number) => {
     const c = getChart();
@@ -363,475 +373,490 @@ export function MarketTerminal({
   };
   const startReplay = () => {
     if (replay) {
-      setReplay(null);
-      setPlaying(false);
+      returnToLive();
       return;
     }
-    if (!snapshot) return;
-    const frozen = { ...snapshot, bars: snapshot.bars.slice(0, -1) };
+    if (!history || history.bars.length < 2) {
+      setNotice("Attends le chargement des bougies.");
+      return;
+    }
+    const bars = tradeHistory ? history.bars : history.bars.slice(0, -1);
+    if (bars.length < 2) return;
+    const frozen = { ...history, bars: [...bars] };
+    setPositionOverview(false);
+    setTradeHistory(null);
+    setPlaying(false);
     setReplay(frozen);
-    setReplayIndex(Math.max(15, frozen.bars.length - 60));
-    setNotice("Replay sur les bougies chargées. Aucune opération envoyée au bot.");
+    setReplayIndex(replayStart(bars.length));
+    setNotice("");
+    setTool("cursor");
   };
-  const toolButton = (value: DrawingTool, label: string, Icon: typeof Crosshair) => (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={tool === value}
-      className={`${s.button} ${tool === value ? s.active : ""}`}
-      onClick={() => {
-        setTool(value);
-        setNotice(
-          value === "cursor"
-            ? ""
-            : value === "horizontal"
-              ? "Cliquez sur le graphique pour poser un niveau."
-              : "Cliquez sur deux points du graphique.",
-        );
-      }}
-    >
-      <Icon size={19} />
-    </button>
-  );
-  const chartHeight = panel
-    ? "clamp(430px, calc(100dvh - 365px), 1200px)"
-    : "clamp(470px, calc(100dvh - 190px), 1500px)";
+  const chooseTool = (value: DrawingTool) => {
+    setTool(value);
+    setDrawingMenu(false);
+    setNotice(
+      value === "cursor"
+        ? ""
+        : value === "measure"
+          ? "Choisis deux bougies · ou utilise deux doigts."
+          : value === "horizontal" || value === "vertical"
+            ? "Un point sur le graphique."
+            : "Deux points sur le graphique.",
+    );
+  };
+  const drawingOptions = [
+    { value: "trend", label: "Ligne de tendance", Icon: ChartLine },
+    { value: "horizontal", label: "Ligne horizontale", Icon: Minus },
+    { value: "vertical", label: "Ligne verticale", Icon: MoveVertical },
+    { value: "ray", label: "Demi-droite", Icon: ArrowUpRight },
+    { value: "arc", label: "Arc", Icon: Spline },
+    { value: "rectangle", label: "Rectangle", Icon: Square },
+  ] as const;
   return (
-    <div
-      ref={host}
-      className={s.terminal}
-      style={fullscreen ? { position: "fixed", inset: 0, zIndex: 50, overflow: "auto" } : undefined}
-    >
+    <div ref={host} className={s.terminal} data-expanded={fullscreen}>
       <a href="#market-chart" className="sr-only focus:not-sr-only">
         Aller au graphique
       </a>
-      <div className={s.top}>
-        <span className={s.brand}>
-          TJ <span className={s.muted}>/</span> Terminal
-        </span>
-        <span className={s.muted}>
-          {symbol.replace("USDT", "")} · {resolution}
-        </span>
-        <span className={s.badge}>Binance Spot · Bots démo / testnet</span>
-      </div>
-      <header className={s.toolbar}>
-        <select
-          aria-label="Crypto en direct"
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value as LiveSymbol)}
-        >
-          {LIVE_SYMBOLS.map((v) => (
-            <option key={v} value={v}>
-              {v.replace("USDT", " / USDT")}
-            </option>
-          ))}
-        </select>
-        <span className={s.divider} />
-        <select
-          aria-label="Unité de temps en direct"
-          value={resolution}
-          onChange={(e) => setResolution(e.target.value as Resolution)}
-        >
-          {(["1m", "5m", "15m", "1h", "1d"] as const).map((v) => (
-            <option key={v}>{v}</option>
-          ))}
-        </select>
-        <button
-          className={s.button}
-          aria-label={line ? "Afficher les bougies" : "Afficher la courbe"}
-          aria-pressed={line}
-          onClick={() => setLine((v) => !v)}
-        >
-          {line ? <ChartLine size={18} /> : <CandlestickChart size={18} />}
-        </button>
-        <span className={s.divider} />
-        <button
-          aria-label="Ajouter des indicateurs"
-          title="Ajouter des indicateurs"
-          className={`${s.button} ${indicatorDialog ? s.active : ""}`}
-          onClick={() => setIndicatorDialog(true)}
-        >
-          <ChartNoAxesCombined size={18} />
-          <span className={s.label}>Indicateurs</span>
-        </button>
-        <button
-          className={s.button}
-          aria-label="Créer une alerte de prix"
-          onClick={() => {
-            setAlertPrice(snapshot ? String(snapshot.price) : "");
-            setAlertDialog(true);
-          }}
-        >
-          <BellPlus size={18} />
-          <span className={s.label}>Alerte</span>
-        </button>
-        <button
-          className={`${s.button} ${replay ? s.active : ""}`}
-          aria-label="Replay des bougies"
-          aria-pressed={!!replay}
-          onClick={startReplay}
-        >
-          <Rewind size={18} />
-          <span className={s.label}>Replay</span>
-        </button>
-        <span className={s.divider} />
-        <button
-          className={s.button}
-          aria-label="Annuler le dernier tracé"
-          onClick={undo}
-          disabled={!drawings[symbol]?.length}
-        >
-          <Undo2 size={17} />
-        </button>
-        <button
-          className={s.button}
-          aria-label="Rétablir le tracé"
-          onClick={redoDrawing}
-          disabled={!redo.length}
-        >
-          <Redo2 size={17} />
-        </button>
-        <span className={s.spacer} />
-        <button
-          className={s.button}
-          aria-label={fullscreen ? "Quitter le plein écran" : "Plein écran"}
-          onClick={toggleFullscreen}
-        >
-          {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
-        </button>
-        <button
-          className={s.button}
-          aria-label="Exporter le graphique"
-          title="Exporter"
-          onClick={() => setExportDialog(true)}
-        >
-          <Download size={18} />
-        </button>
-      </header>
-      {triggered.length > 0 && (
-        <div role="alert" className={s.notice}>
-          {triggered.map((a) => (
-            <span key={a.id}>
-              Alerte {a.symbol} : {a.direction === "above" ? "au-dessus de" : "en dessous de"}{" "}
-              {priceNumber(a.price)} USDT{" "}
-              <button
-                className={s.button}
-                aria-label="Fermer l’alerte déclenchée"
-                onClick={() => setAlerts((v) => v.filter((x) => x.id !== a.id))}
-              >
-                <X size={13} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {notice && (
-        <div role="status" className={s.notice}>
-          {notice}
-          <button className={s.button} aria-label="Fermer le message" onClick={() => setNotice("")}>
-            <X size={13} />
-          </button>
-        </div>
-      )}
-      {error && (
-        <div role="alert" className={s.notice}>
-          {error}
-        </div>
-      )}
-      {replay && (
-        <div className={s.replay}>
-          <strong>REPLAY</strong>
-          <button
-            className={s.button}
-            aria-label={playing ? "Suspendre le replay" : "Lire le replay"}
-            onClick={() => setPlaying((v) => !v)}
-          >
-            {playing ? <Pause size={16} /> : <Play size={16} />}
-          </button>
-          <button
-            className={s.button}
-            aria-label="Bougie suivante"
-            onClick={() => setReplayIndex((i) => Math.min(replay.bars.length, i + 1))}
-          >
-            <StepForward size={16} />
-          </button>
-          <input
-            aria-label="Position du replay"
-            type="range"
-            min={15}
-            max={replay.bars.length}
-            value={replayIndex}
-            onChange={(e) => setReplayIndex(Number(e.target.value))}
-          />
-          <span>
-            {replayIndex} / {replay.bars.length}
+      <div className={s.screen}>
+        <div className={s.top}>
+          <span className={s.brand}>
+            TJ <span className={s.muted}>/</span> Terminal
           </span>
+          <span className={s.muted}>
+            {symbol.replace("USDT", "")} · {resolution}
+          </span>
+          <span className={s.badge}>Binance Spot · Bots démo / testnet</span>
+        </div>
+        <header className={s.toolbar}>
+          <select
+            aria-label="Crypto en direct"
+            value={symbol}
+            onChange={(e) => changeSymbol(e.target.value as LiveSymbol)}
+          >
+            {LIVE_SYMBOLS.map((v) => (
+              <option key={v} value={v}>
+                {v.replace("USDT", " / USDT")}
+              </option>
+            ))}
+          </select>
+          <span className={s.divider} />
+          <select
+            aria-label="Unité de temps en direct"
+            value={resolution}
+            onChange={(e) => changeResolution(e.target.value as Resolution)}
+          >
+            {(["1m", "5m", "15m", "1h", "1d"] as const).map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
           <button
             className={s.button}
+            aria-label={line ? "Afficher les bougies" : "Afficher la courbe"}
+            aria-pressed={line}
+            onClick={() => setLine((v) => !v)}
+          >
+            {line ? <ChartLine size={18} /> : <CandlestickChart size={18} />}
+          </button>
+          <span className={s.divider} />
+          <button
+            aria-label="Ajouter des indicateurs"
+            title="Ajouter des indicateurs"
+            className={`${s.button} ${indicatorDialog ? s.active : ""}`}
+            onClick={() => setIndicatorDialog(true)}
+          >
+            <ChartNoAxesCombined size={18} />
+            <span className={s.label}>Indicateurs</span>
+          </button>
+          <button
+            className={s.button}
+            aria-label="Créer une alerte de prix"
             onClick={() => {
-              setReplay(null);
-              setPlaying(false);
-              setNotice("");
+              setAlertReference(snapshot?.price ?? null);
+              setAlertPrice(snapshot ? String(snapshot.price) : "");
+              setAlertDialog(true);
             }}
           >
-            Retour au direct
+            <BellPlus size={18} />
+            <span className={s.label}>Alerte</span>
           </button>
-        </div>
-      )}
-      <div className={s.workspace}>
-        <aside className={s.tools} aria-label="Outils de dessin">
-          {toolButton("cursor", "Suivre le cours · deux doigts pour mesurer", Crosshair)}
-          {toolButton("trend", "Ligne de tendance", Spline)}
-          {toolButton("horizontal", "Ligne horizontale", Minus)}
-          {toolButton("measure", "Mesurer une variation", Ruler)}
+          <button
+            className={`${s.button} ${replay ? s.active : ""}`}
+            aria-label="Replay des bougies"
+            aria-pressed={!!replay}
+            onClick={startReplay}
+            disabled={!replay && (!history || history.bars.length < 2)}
+          >
+            <Rewind size={18} />
+            <span className={s.label}>Replay</span>
+          </button>
           <span className={s.divider} />
-          <button className={s.button} aria-label="Zoom avant" onClick={() => zoom(0.7)}>
-            <ZoomIn size={19} />
-          </button>
-          <button className={s.button} aria-label="Zoom arrière" onClick={() => zoom(1.4)}>
-            <ZoomOut size={19} />
+          <button
+            className={s.button}
+            aria-label="Annuler le dernier tracé"
+            onClick={undo}
+            disabled={!drawings[symbol]?.length}
+          >
+            <Undo2 size={17} />
           </button>
           <button
             className={s.button}
-            aria-label="Recentrer le graphique"
-            onClick={() => range(60)}
+            aria-label="Rétablir le tracé"
+            onClick={redoDrawing}
+            disabled={!redo.length}
           >
-            <RotateCcw size={18} />
+            <Redo2 size={17} />
           </button>
           <span className={s.spacer} />
           <button
             className={s.button}
-            aria-label="Effacer les tracés"
-            onClick={() => {
-              setDrawings((d) => ({ ...d, [symbol]: [] }));
-              setRedo([]);
-              setNotice("Tracés effacés pour cette crypto.");
-            }}
+            aria-label={fullscreen ? "Quitter le plein écran" : "Plein écran"}
+            onClick={toggleFullscreen}
           >
-            <Trash2 size={18} />
+            {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
           </button>
-        </aside>
-        <section
-          id="market-chart"
-          className={s.surface}
-          aria-label="Grand graphique des cryptomonnaies"
-        >
-          <div className={s.quote}>
-            <span className={s.price} data-live-price>
-              {history ? priceNumber(history.price) : "—"} USDT
-            </span>
-            <span className={history && history.changePct < 0 ? s.down : s.up}>
-              {history && !replay && !tradeHistory
-                ? `${history.changePct >= 0 ? "+" : ""}${number(history.changePct, 2)} %`
-                : "Cours historique"}
-            </span>
-            <span className={s.muted}>
-              {INDICATOR_CATALOG.filter((item) => indicators[item.key])
-                .map((item) => (item.key === "wma" ? `WMA ${period}` : item.name))
-                .join(" · ")}
-            </span>
-            <span className={s.spacer} />
-            <span className={s.muted} data-live-status>
-              {tradeHistory
-                ? positionOverview
-                  ? "Toutes les positions"
-                  : "Historique du trade"
-                : replay
-                  ? "Replay"
-                  : status}
-            </span>
-          </div>
-          {history ? (
-            <Canvas
-              key={`${symbol}:${resolution}:${tradeHistory?.fetchedAt ?? "live"}`}
-              history={history}
-              price={history.price}
-              period={period}
-              indicators={indicators}
-              log={log}
-              line={line}
-              drawings={drawings[symbol] ?? []}
-              tool={tool}
-              events={symbolTrades.flatMap((trade) => trade.events)}
-              levels={symbolTrades.flatMap((trade) => trade.levels)}
-              timeZone={timeZone}
-              height={chartHeight}
-              fullPeriod={!!tradeHistory}
-              onReady={(c) => {
-                chart.current = c;
-              }}
-              onDraw={addDrawing}
-              onMeasure={setNotice}
-            />
-          ) : (
-            <p role="status" style={{ height: chartHeight, padding: 30 }}>
-              Connexion au marché…
-            </p>
-          )}
-          <div
-            className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground"
-            aria-label="Légende du graphique"
+          <button
+            className={s.button}
+            aria-label="Exporter le graphique"
+            title="Exporter"
+            onClick={() => setExportDialog(true)}
           >
-            <span>
-              <span className="text-sky-400">▲</span> Entrée
-            </span>
-            <span>
-              <span className="text-amber-400">◆</span> Sortie
-            </span>
-            <span title="Stop loss de référence · paramètres actuels du bot">
-              <span className="text-loss">■</span> SL
-            </span>
-            <span title="Take profit de référence · paramètres actuels du bot">
-              <span className="text-profit">■</span> TP
-            </span>
-            <span>Références</span>
+            <Download size={18} />
+          </button>
+        </header>
+        {triggered.length > 0 && (
+          <div role="alert" className={s.notice}>
+            {triggered.map((a) => (
+              <span key={a.id}>
+                Alerte {a.symbol} : {a.direction === "above" ? "au-dessus de" : "en dessous de"}{" "}
+                {priceNumber(a.price)} USDT{" "}
+                <button
+                  className={s.button}
+                  aria-label="Fermer l’alerte déclenchée"
+                  onClick={() => setAlerts((v) => v.filter((x) => x.id !== a.id))}
+                >
+                  <X size={13} />
+                </button>
+              </span>
+            ))}
           </div>
-          {tradeHistory && (
+        )}
+        {notice && (
+          <div role="status" className={s.notice}>
+            {notice}
             <button
               className={s.button}
-              aria-label="Retour au cours en direct"
+              aria-label="Fermer le message"
+              onClick={() => setNotice("")}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+        {error && (
+          <div role="alert" className={s.notice}>
+            {error}
+          </div>
+        )}
+        {replay && (
+          <div className={s.replay}>
+            <strong>REPLAY</strong>
+            <button
+              className={s.button}
+              aria-label={playing ? "Suspendre le replay" : "Lire le replay"}
               onClick={() => {
-                setPositionOverview(false);
-                setTradeHistory(null);
+                if (!playing && replayIndex >= replay.bars.length)
+                  setReplayIndex(replayStart(replay.bars.length));
+                setPlaying((v) => !v);
               }}
             >
-              Direct
-            </button>
-          )}
-          <div className={s.range}>
-            <button
-              className={`${s.button} ${positionOverview ? s.active : ""}`}
-              aria-label="Afficher les positions du bot"
-              aria-pressed={positionOverview}
-              onClick={() => setPositionOverview((value) => !value)}
-            >
-              Positions
+              {playing ? <Pause size={16} /> : <Play size={16} />}
             </button>
             <button
               className={s.button}
-              aria-label="Afficher toutes les bougies"
-              onClick={() => range(0)}
+              aria-label="Bougie suivante"
+              disabled={replayIndex >= replay.bars.length}
+              onClick={() => {
+                setPlaying(false);
+                setReplayIndex((i) => Math.min(replay.bars.length, i + 1));
+              }}
             >
-              Tout
+              <StepForward size={16} />
+            </button>
+            <input
+              aria-label="Position du replay"
+              type="range"
+              min={1}
+              max={replay.bars.length}
+              value={replayIndex}
+              onChange={(e) => {
+                setPlaying(false);
+                setReplayIndex(Number(e.target.value));
+              }}
+            />
+            <span data-replay-progress>
+              {replayIndex} / {replay.bars.length}
+            </span>
+            <select
+              aria-label="Vitesse du replay"
+              value={replaySpeed}
+              onChange={(e) => setReplaySpeed(Number(e.target.value))}
+            >
+              {[0.5, 1, 2, 4].map((v) => (
+                <option key={v} value={v}>
+                  {v}×
+                </option>
+              ))}
+            </select>
+            <button className={s.button} onClick={returnToLive}>
+              Retour au direct
+            </button>
+          </div>
+        )}
+        <div className={s.workspace}>
+          <aside className={s.tools} aria-label="Outils de dessin">
+            <button
+              className={`${s.button} ${tool === "cursor" ? s.active : ""}`}
+              aria-label="Suivre le cours"
+              aria-pressed={tool === "cursor"}
+              onClick={() => chooseTool("cursor")}
+            >
+              <Crosshair size={19} />
+            </button>
+            <div
+              className={s.drawingMenu}
+              onMouseEnter={() => setDrawingMenu(true)}
+              onMouseLeave={() => setDrawingMenu(false)}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) setDrawingMenu(false);
+              }}
+            >
+              <button
+                className={`${s.button} ${!["cursor", "measure"].includes(tool) ? s.active : ""}`}
+                aria-label="Outils de dessin"
+                aria-expanded={drawingMenu}
+                aria-controls="market-drawing-menu"
+                aria-haspopup="menu"
+                onClick={() => setDrawingMenu(true)}
+              >
+                <PencilRuler size={19} />
+              </button>
+              {drawingMenu && (
+                <div
+                  id="market-drawing-menu"
+                  className={s.drawingPopover}
+                  role="menu"
+                  aria-label="Dessiner sur le graphique"
+                >
+                  {drawingOptions.map(({ value, label, Icon }) => (
+                    <button
+                      key={value}
+                      role="menuitem"
+                      className={`${s.button} ${tool === value ? s.active : ""}`}
+                      onClick={() => chooseTool(value)}
+                    >
+                      <Icon size={17} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              className={`${s.button} ${tool === "measure" ? s.active : ""}`}
+              aria-label="Comparer les cours en pourcentage"
+              aria-pressed={tool === "measure"}
+              onClick={() => chooseTool(tool === "measure" ? "cursor" : "measure")}
+            >
+              <Ruler size={19} />
+            </button>
+            <span className={s.divider} />
+            <button className={s.button} aria-label="Zoom avant" onClick={() => zoom(0.7)}>
+              <ZoomIn size={19} />
+            </button>
+            <button className={s.button} aria-label="Zoom arrière" onClick={() => zoom(1.4)}>
+              <ZoomOut size={19} />
             </button>
             <button
               className={s.button}
-              aria-label={enabled ? "Mettre en pause" : "Reprendre le direct"}
-              onClick={() => setEnabled((v) => !v)}
+              aria-label="Recentrer le graphique"
+              onClick={() => range(60)}
             >
-              {enabled ? <Pause size={14} /> : <Play size={14} />}
+              <RotateCcw size={18} />
             </button>
             <span className={s.spacer} />
-            <span className={s.muted} data-live-updated>
-              {receivedAt ? new Date(receivedAt).toISOString().slice(11, 19) : "—"} UTC
-            </span>
             <button
-              className={`${s.button} ${log ? s.active : ""}`}
-              aria-pressed={log}
-              onClick={() => setLog((v) => !v)}
+              className={s.button}
+              aria-label="Effacer les tracés"
+              onClick={() => {
+                setDrawings((d) => ({ ...d, [symbol]: [] }));
+                setRedo([]);
+                setNotice("Tracés effacés pour cette crypto.");
+              }}
             >
-              log
+              <Trash2 size={18} />
             </button>
-          </div>
-          <div className={s.tabs}>
-            <button
-              id="chart-trades-toggle"
-              className={`${s.button} ${panel ? s.active : ""}`}
-              aria-expanded={panel}
-              aria-controls="chart-trades-panel"
-              onClick={() => setPanel((value) => !value)}
-            >
-              Trade affiché <span aria-hidden="true">{panel ? "−" : "+"}</span>
-            </button>
-          </div>
-          {panel && (
-            <section
-              id="chart-trades-panel"
-              aria-labelledby="chart-trades-toggle"
-              className={s.panel}
-            >
-              <div className={s.config}>
-                <label className="min-w-0 flex-1 flex-wrap">
-                  Trade
-                  <select
-                    aria-label="Trade affiché sur le graphique"
-                    className="min-w-0 w-full max-w-full rounded border bg-background p-2"
-                    value={selected?.key ?? ""}
-                    onChange={(event) => setSelectedTrade(event.target.value)}
-                  >
-                    {symbolTrades.length ? (
-                      symbolTrades.map((trade) => (
-                        <option key={trade.key} value={trade.key}>
-                          {trade.openedAt.replace("T", " ").slice(0, 16)} ·{" "}
-                          {trade.status === "open" ? "Ouvert" : "Clôturé"}
-                        </option>
-                      ))
-                    ) : (
-                      <option>Aucun trade</option>
+          </aside>
+          <section
+            id="market-chart"
+            className={s.surface}
+            aria-label="Grand graphique des cryptomonnaies"
+          >
+            <div className={s.quote}>
+              <span className={s.price} data-live-price>
+                {history
+                  ? priceNumber(history.price).replace(/([,.]\d*?[1-9])0+$|[,.]0+$/, "$1")
+                  : "—"}{" "}
+                USDT
+              </span>
+              <span className={history && history.changePct < 0 ? s.down : s.up}>
+                {history && !replay && !tradeHistory
+                  ? `${history.changePct >= 0 ? "+" : ""}${number(history.changePct, 2)} %`
+                  : "Cours historique"}
+              </span>
+              <span className={s.muted}>
+                {INDICATOR_CATALOG.filter((item) => indicators[item.key])
+                  .map((item) => (item.key === "wma" ? `WMA ${period}` : item.name))
+                  .join(" · ")}
+              </span>
+              <span className={s.spacer} />
+              <span className={s.muted} data-live-status>
+                {tradeHistory
+                  ? positionOverview
+                    ? "Toutes les positions"
+                    : "Historique du trade"
+                  : replay
+                    ? "Replay"
+                    : status}
+              </span>
+            </div>
+            <div className={s.chartViewport}>
+              {history ? (
+                <Canvas
+                  key={`${symbol}:${resolution}:${replay ? "replay" : (tradeHistory?.fetchedAt ?? "live")}`}
+                  history={history}
+                  price={history.price}
+                  period={period}
+                  indicators={indicators}
+                  log={log}
+                  line={line}
+                  drawings={drawings[symbol] ?? []}
+                  tool={tool}
+                  events={symbolTrades
+                    .flatMap((trade) => trade.events)
+                    .filter(
+                      (event) =>
+                        !replay ||
+                        event.time < (history.bars.at(-1)?.time ?? 0) + RESOLUTIONS[resolution],
                     )}
-                  </select>
-                </label>
-                <button
-                  className={s.button}
-                  aria-label="Voir la position sur le graphique"
-                  title="Voir la position sur le graphique"
-                  disabled={tradeLoading || !selected}
-                  onClick={showTrade}
-                >
-                  {tradeLoading ? "Chargement…" : "Afficher"}
-                </button>
-                <button
-                  className={s.button}
-                  aria-label="Actualiser les trades"
-                  title="Actualiser les trades"
-                  onClick={() => router.refresh()}
-                >
-                  <RefreshCw size={16} aria-hidden="true" />
-                </button>
-              </div>
-              {selected && (
-                <>
-                  <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                    <div>
-                      <dt className={s.muted} title="Prix moyen d’entrée">
-                        Entrée
-                      </dt>
-                      <dd>{priceNumber(selected.avgEntry)} USDT</dd>
-                    </div>
-                    <div>
-                      <dt className={s.muted} title="Quantité restante">
-                        Restant
-                      </dt>
-                      <dd>{number(selected.openQuantity, 6)}</dd>
-                    </div>
-                    <div>
-                      <dt className={s.muted} title="Résultat déjà réalisé">
-                        Réalisé
-                      </dt>
-                      <dd className={selected.netPnl < 0 ? s.down : s.up}>
-                        {number(selected.netPnl, 4)} USDT
-                      </dd>
-                    </div>
-                  </dl>
-                  <a className="mt-4 inline-block text-sm" href={tradePath(selected.key)}>
-                    Exécutions
-                  </a>
-                </>
-              )}
-              <details className={`${s.muted} mt-3`}>
-                <summary className="cursor-pointer">Repères SL/TP</summary>
-                <p className="mt-2">
-                  Un bloc par achat, jusqu’à l’exécution suivante. Les rectangles suivent la bougie
-                  d’entrée Binance et les paramètres actuels du bot ; ce sont des repères, pas des
-                  ordres confirmés. Pour une entrée hors écran, cliquez sur Afficher. Les prix réels
-                  démo/testnet restent dans Exécutions.
+                  levels={symbolTrades
+                    .flatMap((trade) => trade.levels)
+                    .filter(
+                      (level) =>
+                        !replay ||
+                        level.time < (history.bars.at(-1)?.time ?? 0) + RESOLUTIONS[resolution],
+                    )}
+                  alerts={alerts.filter((a) => a.symbol === symbol && !a.triggered)}
+                  timeZone={timeZone}
+                  height="100%"
+                  fullPeriod={!!tradeHistory}
+                  onReady={(c) => {
+                    chart.current = c;
+                  }}
+                  onDraw={addDrawing}
+                  onMeasure={setNotice}
+                />
+              ) : (
+                <p role="status" style={{ height: "100%", padding: 30 }}>
+                  Connexion au marché…
                 </p>
-              </details>
-            </section>
-          )}
-        </section>
+              )}
+            </div>
+            <div
+              className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground"
+              aria-label="Légende du graphique"
+            >
+              <span>
+                <span className="text-sky-400">▲</span> Entrée
+              </span>
+              <span>
+                <span className="text-amber-400">◆</span> Sortie
+              </span>
+              <span title="Stop loss de référence · paramètres actuels du bot">
+                <span className="text-loss">■</span> SL
+              </span>
+              <span title="Take profit de référence · paramètres actuels du bot">
+                <span className="text-profit">■</span> TP
+              </span>
+              <span>Références</span>
+            </div>
+            <div className={s.range}>
+              <button
+                className={`${s.button} ${positionOverview ? s.active : ""}`}
+                aria-label="Afficher les positions du bot"
+                aria-pressed={positionOverview}
+                disabled={!symbolTrades.length || tradeLoading}
+                onClick={() => {
+                  if (positionOverview || tradeHistory) returnToLive();
+                  else {
+                    setReplay(null);
+                    setPlaying(false);
+                    setPositionOverview(true);
+                  }
+                }}
+              >
+                Positions
+              </button>
+              {tradeHistory && !replay && (
+                <button
+                  className={s.button}
+                  aria-label="Retour au cours en direct"
+                  onClick={returnToLive}
+                >
+                  Direct
+                </button>
+              )}
+              <button
+                className={s.button}
+                aria-label="Afficher toutes les bougies"
+                onClick={() => range(0)}
+              >
+                Tout
+              </button>
+              <a className={s.button} href="#market-trade-history">
+                Trades · {symbolTrades.length}
+              </a>
+              <button
+                className={s.button}
+                aria-label={enabled ? "Mettre en pause" : "Reprendre le direct"}
+                onClick={() => setEnabled((v) => !v)}
+              >
+                {enabled ? <Pause size={14} /> : <Play size={14} />}
+              </button>
+              <span className={s.spacer} />
+              <span className={s.muted} data-live-updated>
+                {receivedAt ? new Date(receivedAt).toISOString().slice(11, 19) : "—"} UTC
+              </span>
+              <button
+                className={`${s.button} ${log ? s.active : ""}`}
+                aria-pressed={log}
+                onClick={() => setLog((v) => !v)}
+              >
+                log
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
+      <MarketTradeHistory
+        trades={trades}
+        symbol={symbol}
+        timeZone={timeZone}
+        container={host.current}
+        onShowTrade={(trade) => {
+          void showTrade(trade);
+          host.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
       <Dialog open={indicatorDialog} onOpenChange={setIndicatorDialog}>
         <DialogContent container={host.current}>
           <DialogHeader>
@@ -946,8 +971,11 @@ export function MarketTerminal({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              const price = Number(alertPrice);
-              if (Number.isFinite(price) && price > 0) {
+              const price =
+                alertMode === "percent"
+                  ? percentAlertPrice(alertReference ?? 0, Number(alertPercent), direction)
+                  : Number(alertPrice);
+              if (price != null && Number.isFinite(price) && price > 0) {
                 setAlerts((a) => [
                   ...a,
                   { id: crypto.randomUUID(), symbol, price, direction, triggered: false },
@@ -959,6 +987,25 @@ export function MarketTerminal({
               }
             }}
           >
+            <div className="flex gap-2" aria-label="Type d’alerte">
+              {(["percent", "price"] as const).map((mode) => (
+                <button
+                  type="button"
+                  className={`rounded-lg border px-3 py-2 text-sm ${alertMode === mode ? "border-brand text-brand" : "text-muted-foreground"}`}
+                  aria-pressed={alertMode === mode}
+                  key={mode}
+                  onClick={() => setAlertMode(mode)}
+                >
+                  {mode === "percent" ? "Variation %" : "Prix USDT"}
+                </button>
+              ))}
+            </div>
+            {alertMode === "percent" && (
+              <p className="text-xs text-muted-foreground">
+                Cours de référence :{" "}
+                {alertReference == null ? "Indisponible" : `${priceNumber(alertReference)} USDT`}
+              </p>
+            )}
             <label className="block text-sm">
               Déclenchement
               <select
@@ -966,24 +1013,58 @@ export function MarketTerminal({
                 value={direction}
                 onChange={(e) => setDirection(e.target.value as typeof direction)}
               >
-                <option value="above">Prix supérieur ou égal</option>
-                <option value="below">Prix inférieur ou égal</option>
+                <option value="above">
+                  {alertMode === "percent" ? "Hausse" : "Prix supérieur ou égal"}
+                </option>
+                <option value="below">
+                  {alertMode === "percent" ? "Baisse" : "Prix inférieur ou égal"}
+                </option>
               </select>
             </label>
             <label className="block text-sm">
-              Prix USDT
+              {alertMode === "percent" ? "Variation (%)" : "Prix USDT"}
               <input
                 required
-                aria-label="Prix de l’alerte"
+                aria-label={
+                  alertMode === "percent" ? "Pourcentage de l’alerte" : "Prix de l’alerte"
+                }
                 className="mt-1 block w-full rounded border bg-background p-2"
                 type="number"
                 min="0.0000000001"
+                max={
+                  alertMode === "percent" ? (direction === "below" ? 99.999999 : 1000) : undefined
+                }
                 step="any"
-                value={alertPrice}
-                onChange={(e) => setAlertPrice(e.target.value)}
+                value={alertMode === "percent" ? alertPercent : alertPrice}
+                onChange={(e) =>
+                  alertMode === "percent"
+                    ? setAlertPercent(e.target.value)
+                    : setAlertPrice(e.target.value)
+                }
               />
             </label>
-            <button type="submit" className="rounded bg-brand px-4 py-2 text-sm text-white">
+            {alertMode === "percent" && (
+              <p className="text-sm" data-alert-target>
+                {(() => {
+                  const target = percentAlertPrice(
+                    alertReference ?? 0,
+                    Number(alertPercent),
+                    direction,
+                  );
+                  return target == null
+                    ? "Variation invalide"
+                    : `Seuil : ${priceNumber(target)} USDT`;
+                })()}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={
+                alertMode === "percent" &&
+                percentAlertPrice(alertReference ?? 0, Number(alertPercent), direction) == null
+              }
+              className="rounded bg-brand px-4 py-2 text-sm text-white disabled:opacity-40"
+            >
               Créer l’alerte
             </button>
           </form>

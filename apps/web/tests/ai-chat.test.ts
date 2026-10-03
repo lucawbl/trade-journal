@@ -101,7 +101,7 @@ describe("authenticated AI conversation", () => {
       expect(response.status).toBe(400);
       expect((await response.json()).error).toContain("Ajoute une clé API OpenAI");
       // Only the provider setting can be read; journal account/trade columns stay untouched.
-      expect(select.mock.calls.every((call) => call.length === 0)).toBe(true);
+      expect(select.mock.calls.every((call) => (call as unknown[]).length === 0)).toBe(true);
       expect(query).not.toHaveBeenCalled();
       expect(mocks.runAi).not.toHaveBeenCalled();
     } finally {

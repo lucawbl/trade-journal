@@ -38,12 +38,12 @@ describe("terminal indicators", () => {
   });
   it("executes WMA crossing at the following open, not the signal close, and charges both sides", () => {
     const bars = [10, 9, 8, 12, 13, 7, 6].map(bar);
-    bars[4].open = 20;
-    bars[6].open = 5;
+    bars[4]!.open = 20;
+    bars[6]!.open = 5;
     const value = testWma(bars, 3);
     expect(value.trades).toHaveLength(1);
-    expect(value.trades[0].entryTime).toBe(240000);
-    expect(value.trades[0].exitTime).toBe(360000);
+    expect(value.trades[0]!.entryTime).toBe(240000);
+    expect(value.trades[0]!.exitTime).toBe(360000);
     expect(value.equity).toBeCloseTo(((1000 * 0.999) / 20) * 5 * 0.999);
     expect(value.open).toBe(false);
   });

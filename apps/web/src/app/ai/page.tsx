@@ -4,11 +4,17 @@ import { requireJournalSession } from "@/server/journal-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function AiPage() {
+export default async function AiPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireJournalSession();
+  const params = await searchParams;
+  const prompt = typeof params.prompt === "string" ? params.prompt.slice(0, 4000) : "";
   return (
     <DashboardShell title="IA" active="/ai">
-      <AiChat />
+      <AiChat initialMessage={prompt} />
     </DashboardShell>
   );
 }

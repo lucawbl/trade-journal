@@ -81,7 +81,7 @@ export function testWma(bars: MarketBar[], period = 9, feePct = 0.1) {
 }
 export type Drawing = {
   id: string;
-  kind: "trend" | "horizontal" | "measure";
+  kind: "trend" | "horizontal" | "vertical" | "ray" | "rectangle" | "arc" | "measure";
   points: [number, number][];
 };
 export type DrawingTool = "cursor" | Drawing["kind"];

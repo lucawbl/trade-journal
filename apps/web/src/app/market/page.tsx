@@ -34,6 +34,8 @@ export default async function MarketPage({
       direction: row.direction,
       status: row.status,
       openedAt: row.openedAt,
+      closedAt: row.closedAt,
+      currency: view.accounts.find((a) => a.id === row.accountId)?.currency ?? "USDT",
       avgEntry: row.avgEntry,
       openQuantity: row.openQuantity,
       netPnl: row.netPnl,

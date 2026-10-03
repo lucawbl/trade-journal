@@ -30,6 +30,7 @@ import { number, priceNumber, timestamp } from "@/lib/journal-format";
 import type { executionChart } from "@/lib/execution-chart";
 import { chartMarkers } from "@/lib/chart-markers";
 import { riskZones } from "@/lib/risk-zones";
+import { drawingPath } from "@/lib/terminal-tools";
 import type { riskTimeline } from "@/lib/bot-risk";
 echarts.use([
   MarkAreaComponent,
@@ -52,6 +53,7 @@ export function TerminalCanvas({
   tool,
   events,
   levels,
+  alerts = [],
   timeZone,
   height,
   fullPeriod = false,
@@ -69,6 +71,7 @@ export function TerminalCanvas({
   tool: DrawingTool;
   events: ReturnType<typeof executionChart>["events"];
   levels: ReturnType<typeof riskTimeline>;
+  alerts?: { id: string; price: number }[];
   timeZone: string;
   height: string;
   fullPeriod?: boolean;
@@ -77,60 +80,114 @@ export function TerminalCanvas({
   onMeasure: (text: string) => void;
 }) {
   const instance = useRef<TerminalChart | null>(null);
-  useEffect(() => {
-    const chart = instance.current;
-    if (chart && !chart.isDisposed())
-      chart.setOption({
-        dataZoom: [{ zoomOnMouseWheel: tool === "cursor", moveOnMouseMove: tool === "cursor" }],
-      });
-  }, [tool]);
   const bars = history.bars;
   const hoverAxis = useRef(0);
   const dragging = useRef(false);
-  const [comparison, setComparison] = useState<{ from: number; to: number; change: number } | null>(
-    null,
-  );
   const comparing = useRef(false);
+  const [selection, setSelection] = useState<[number, number][]>([]);
+  const comparison =
+    selection.length === 2
+      ? {
+          from: selection[0]![1],
+          to: selection[1]![1],
+          change: (selection[1]![1] / selection[0]![1] - 1) * 100,
+          candles: Math.abs(
+            Math.round((selection[1]![0] - selection[0]![0]) / RESOLUTIONS[history.resolution]),
+          ),
+        }
+      : null;
   const layout = indicatorLayout(indicators);
   const latest = useRef({ tool, bars, onDraw, onMeasure, onReady });
   latest.current = { tool, bars, onDraw, onMeasure, onReady };
   const first = useRef<[number, number] | null>(null);
-  const previousTool = useRef(tool);
-  if (previousTool.current !== tool) {
+  useEffect(() => {
     first.current = null;
-    previousTool.current = tool;
-  }
+    comparing.current = false;
+    setSelection([]);
+    const chart = instance.current;
+    if (!chart || chart.isDisposed()) return;
+    chart.dispatchAction({ type: "hideTip" });
+    chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
+    chart.setOption({
+      dataZoom: [
+        {
+          disabled: false,
+          zoomOnMouseWheel: tool === "cursor",
+          moveOnMouseMove: tool === "cursor",
+        },
+      ],
+      series: [{ id: "cursor-points", data: [], markLine: { data: [] } }],
+    });
+  }, [tool]);
   const ready = (chart: TerminalChart) => {
     instance.current = chart;
     latest.current.onReady(chart);
+    const sample = (x: number, y: number, inside = true) => {
+      if (inside && !chart.containPixel({ gridIndex: 0 }, [x, y])) return null;
+      const values = chart.convertFromPixel({ gridIndex: 0 }, [x, y]) as number[];
+      if (!Number.isFinite(values[0])) return null;
+      const index = Math.max(0, Math.min(latest.current.bars.length - 1, Math.round(values[0]!)));
+      const bar = latest.current.bars[index];
+      return bar ? { index, bar, y: values[1]! } : null;
+    };
+    const clearGuides = () => {
+      chart.dispatchAction({ type: "hideTip" });
+      chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
+      chart.setOption({ series: [{ id: "cursor-points", data: [], markLine: { data: [] } }] });
+    };
+    const measure = (points: [number, number][]) => {
+      setSelection(points);
+      chart.dispatchAction({ type: "hideTip" });
+      chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
+      const data = points
+        .map((p) => [latest.current.bars.findIndex((b) => b.time === p[0]), p[1]])
+        .filter((p) => p[0]! >= 0);
+      chart.setOption({
+        series: [
+          {
+            id: "cursor-points",
+            data,
+            markLine: {
+              silent: true,
+              symbol: "none",
+              label: { show: false },
+              lineStyle: { color: "#8fa8ca", type: "dashed" },
+              data: data.map((p) => ({ xAxis: p[0] })),
+            },
+          },
+        ],
+      });
+    };
     const follow = (x: number, y: number) => {
       if (latest.current.tool !== "cursor" || comparing.current || dragging.current) return;
-      if (!chart.containPixel({ gridIndex: 0 }, [x, y])) return;
-      const values = chart.convertFromPixel({ gridIndex: 0 }, [x, y]) as number[];
-      const index = Math.max(
-        0,
-        Math.min(latest.current.bars.length - 1, Math.round(values[0] ?? 0)),
-      );
-      const bar = latest.current.bars[index];
-      if (!bar) return;
-      const point = chart.convertToPixel({ gridIndex: 0 }, [index, bar.close]) as number[];
-      chart.setOption({ series: [{ id: "cursor-points", data: [[index, bar.close]], markLine: { data: [] } }] });
-      chart.dispatchAction({ type: "showTip", x: point[0], y: point[1] });
+      const point = sample(x, y);
+      if (!point) return;
+      const pixel = chart.convertToPixel({ gridIndex: 0 }, [
+        point.index,
+        point.bar.close,
+      ]) as number[];
+      chart.setOption({
+        series: [
+          { id: "cursor-points", data: [[point.index, point.bar.close]], markLine: { data: [] } },
+        ],
+      });
+      chart.dispatchAction({ type: "showTip", x: pixel[0], y: pixel[1] });
     };
     const hover = (event: MouseEvent) => {
       if (comparing.current) return;
       const rect = chart.getDom().getBoundingClientRect();
+      const x = event.clientX - rect.left,
+        y = event.clientY - rect.top;
+      if (latest.current.tool === "measure" && first.current) {
+        const point = sample(x, y);
+        if (point) measure([first.current, [point.bar.time, point.bar.close]]);
+        return;
+      }
+      if (latest.current.tool !== "cursor") return;
       hoverAxis.current =
-        [0, 1, 2, 3, 4].find((gridIndex) =>
-          chart.containPixel({ gridIndex }, [event.clientX - rect.left, event.clientY - rect.top]),
-        ) ?? 0;
-      if (hoverAxis.current === 0) follow(event.clientX - rect.left, event.clientY - rect.top);
-      else if (!dragging.current)
-        chart.dispatchAction({
-          type: "showTip",
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-        });
+        [0, 1, 2, 3, 4].find((gridIndex) => chart.containPixel({ gridIndex }, [x, y])) ?? 0;
+      if (hoverAxis.current === 0) follow(x, y);
+      else if (!dragging.current) chart.dispatchAction({ type: "showTip", x, y });
     };
     const down = () => {
       dragging.current = true;
@@ -140,129 +197,100 @@ export function TerminalCanvas({
       dragging.current = false;
     };
     const touches = (event: TouchEvent) => {
-      if (latest.current.tool !== "cursor") return;
-      if (event.touches.length === 1 && !comparing.current) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        dragging.current = false;
-        const touch = event.touches[0];
-        if (!touch) return;
-        const rect = chart.getDom().getBoundingClientRect();
-        chart.setOption({ dataZoom: [{ disabled: true }] });
-        follow(touch.clientX - rect.left, touch.clientY - rect.top);
+      const tool = latest.current.tool;
+      const rect = chart.getDom().getBoundingClientRect();
+      if (tool === "cursor") {
+        if (event.touches.length === 1) {
+          const touch = event.touches[0]!;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          dragging.current = false;
+          chart.setOption({ dataZoom: [{ disabled: true }] });
+          follow(touch.clientX - rect.left, touch.clientY - rect.top);
+        } else if (event.touches.length >= 2) {
+          clearGuides();
+          chart.setOption({ dataZoom: [{ disabled: false }] });
+        }
         return;
       }
-      if (event.touches.length !== 2) return;
+      if (tool !== "measure" || event.touches.length !== 2) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       comparing.current = true;
       dragging.current = false;
-      const rect = chart.getDom().getBoundingClientRect();
+      first.current = null;
       const points = Array.from(event.touches)
-        .map((touch) => {
-          const values = chart.convertFromPixel({ gridIndex: 0 }, [
-            touch.clientX - rect.left,
-            touch.clientY - rect.top,
-          ]) as number[];
-          const index = Math.max(
-            0,
-            Math.min(latest.current.bars.length - 1, Math.round(values[0] ?? 0)),
-          );
-          return { index, bar: latest.current.bars[index] };
-        })
+        .map((t) => sample(t.clientX - rect.left, t.clientY - rect.top, false))
+        .filter((p) => p != null)
         .sort((a, b) => a.index - b.index);
-      const a = points[0],
-        b = points[1];
-      if (!a?.bar || !b?.bar || a.bar.close <= 0) return;
-      chart.dispatchAction({ type: "hideTip" });
-      // hideTip does not clear ECharts' independent crosshair. During a
-      // comparison only the two moving guides should remain visible.
-      chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
-      chart.setOption({
-        dataZoom: [{ disabled: true }],
-        series: [
-          {
-            id: "cursor-points",
-            data: [
-              [a.index, a.bar.close],
-              [b.index, b.bar.close],
-            ],
-            markLine: {
-              silent: true,
-              symbol: "none",
-              label: { show: false },
-              lineStyle: { color: "#8fa8ca", type: "dashed" },
-              data: [{ xAxis: a.index }, { xAxis: b.index }],
-            },
-          },
-        ],
-      });
-      setComparison({
-        from: a.bar.close,
-        to: b.bar.close,
-        change: (b.bar.close / a.bar.close - 1) * 100,
-      });
+      if (points.length !== 2) return;
+      chart.setOption({ dataZoom: [{ disabled: true }] });
+      measure(points.map((p) => [p.bar.time, p.bar.close]));
     };
     const endTouches = (event: TouchEvent) => {
       if (event.touches.length === 2) return;
+      if (comparing.current) {
+        setSelection([]);
+        first.current = null;
+      }
       comparing.current = false;
-      setComparison(null);
-      chart.dispatchAction({ type: "hideTip" });
-      chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
-      chart.setOption({
-        dataZoom: [{ disabled: false }],
-        series: [{ id: "cursor-points", data: [], markLine: { data: [] } }],
-      });
+      clearGuides();
+      chart.setOption({ dataZoom: [{ disabled: false }] });
     };
-    chart.getDom().addEventListener("touchstart", touches, { capture: true, passive: false });
-    chart.getDom().addEventListener("touchmove", touches, { capture: true, passive: false });
-    chart.getDom().addEventListener("touchend", endTouches, true);
-    chart.getDom().addEventListener("touchcancel", endTouches, true);
-    chart.getDom().addEventListener("pointerdown", down, true);
-    document.addEventListener("pointerup", up);
-    document.addEventListener("pointercancel", up);
-    chart.getDom().addEventListener("mousemove", hover, true);
-    chart.getZr().on("click", (event) => {
+    const click = (event: { offsetX: number; offsetY: number }) => {
       const state = latest.current;
       if (state.tool === "cursor") {
-        if (chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]))
-          follow(event.offsetX, event.offsetY);
+        follow(event.offsetX, event.offsetY);
         return;
       }
-      if (!chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY])) return;
-      const value = chart.convertFromPixel({ gridIndex: 0 }, [
-        event.offsetX,
-        event.offsetY,
-      ]) as number[];
-      if (value.length < 2 || !Number.isFinite(value[0]) || !Number.isFinite(value[1])) return;
-      const index = Math.max(0, Math.min(state.bars.length - 1, Math.round(value[0]!)));
-      if (!state.bars[index] || !Number.isFinite(value[1])) return;
-      const point: [number, number] = [state.bars[index]!.time, value[1]!];
-      if (state.tool === "horizontal")
-        state.onDraw({ id: crypto.randomUUID(), kind: "horizontal", points: [point] });
-      else if (!first.current) {
-        first.current = point;
-        state.onMeasure("Premier point posé. Cliquez sur le second point.");
-      } else {
-        const start = first.current;
-        first.current = null;
-        state.onDraw({ id: crypto.randomUUID(), kind: state.tool, points: [start, point] });
-        state.onMeasure(
-          state.tool === "measure"
-            ? `${((point[1] / start[1] - 1) * 100).toFixed(2)} % · ${Math.abs(Math.round((point[0] - start[0]) / RESOLUTIONS[history.resolution]))} bougies`
-            : "Ligne de tendance ajoutée.",
-        );
+      if (comparing.current) return;
+      const point = sample(event.offsetX, event.offsetY);
+      if (!point || !Number.isFinite(point.y)) return;
+      if (state.tool === "measure") {
+        const value: [number, number] = [point.bar.time, point.bar.close];
+        if (!first.current) {
+          first.current = value;
+          measure([value]);
+        } else {
+          measure([first.current, value]);
+          first.current = null;
+        }
+        state.onMeasure("");
+        return;
       }
-    });
+      if (point.y <= 0) return;
+      const value: [number, number] = [point.bar.time, point.y];
+      if (state.tool === "horizontal" || state.tool === "vertical")
+        state.onDraw({ id: crypto.randomUUID(), kind: state.tool, points: [value] });
+      else if (!first.current) {
+        first.current = value;
+        state.onMeasure("Choisis le second point.");
+      } else {
+        state.onDraw({ id: crypto.randomUUID(), kind: state.tool, points: [first.current, value] });
+        first.current = null;
+        state.onMeasure("");
+      }
+    };
+    const dom = chart.getDom();
+    dom.addEventListener("touchstart", touches, { capture: true, passive: false });
+    dom.addEventListener("touchmove", touches, { capture: true, passive: false });
+    dom.addEventListener("touchend", endTouches, true);
+    dom.addEventListener("touchcancel", endTouches, true);
+    dom.addEventListener("pointerdown", down, true);
+    dom.addEventListener("mousemove", hover, true);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+    chart.getZr().on("click", click);
     return () => {
-      chart.getDom().removeEventListener("touchstart", touches, true);
-      chart.getDom().removeEventListener("touchmove", touches, true);
-      chart.getDom().removeEventListener("touchend", endTouches, true);
-      chart.getDom().removeEventListener("touchcancel", endTouches, true);
-      chart.getDom().removeEventListener("mousemove", hover, true);
-      chart.getDom().removeEventListener("pointerdown", down, true);
+      dom.removeEventListener("touchstart", touches, true);
+      dom.removeEventListener("touchmove", touches, true);
+      dom.removeEventListener("touchend", endTouches, true);
+      dom.removeEventListener("touchcancel", endTouches, true);
+      dom.removeEventListener("mousemove", hover, true);
+      dom.removeEventListener("pointerdown", down, true);
       document.removeEventListener("pointerup", up);
       document.removeEventListener("pointercancel", up);
+      chart.getZr().off("click", click);
     };
   };
   const times = bars.map((b) => timestamp(new Date(b.time).toISOString(), timeZone));
@@ -282,16 +310,11 @@ export function TerminalCanvas({
       const active = levels.findLast((e) => e.time < b.time + RESOLUTIONS[history.resolution]);
       return active && (active.position > 1e-10 || active.time >= b.time) ? active[key] : null;
     });
-  const drawingData: ([number, number] | null)[] = [];
-  drawings.forEach((d) => {
-    const start = d.points[0];
-    const end = d.points[1];
-    if (!start) return;
-    const a = findIndex(start[0]);
-    const b = end ? findIndex(end[0]) : -1;
-    if (d.kind === "horizontal") drawingData.push([0, start[1]], [bars.length - 1, start[1]], null);
-    else if (end && a >= 0 && b >= 0) drawingData.push([a, start[1]], [b, end![1]], null);
-  });
+  const drawingData: ([number, number] | null)[] = drawings.flatMap((d) => [
+    ...drawingPath(d, bars, history.resolution),
+    null,
+  ]);
+  const selectionData = selection.map((p) => [findIndex(p[0]), p[1]]).filter((p) => p[0]! >= 0);
   const ar = aroon(bars),
     mf = mfi(bars),
     rs = rsi(bars),
@@ -485,11 +508,37 @@ export function TerminalCanvas({
         id: "cursor-points",
         name: "Sélection du cours",
         type: "scatter",
-        data: [],
+        data: tool === "measure" ? selectionData : [],
+        markLine: {
+          silent: true,
+          symbol: "none",
+          label: { show: false },
+          lineStyle: { color: "#8fa8ca", type: "dashed" },
+          data: tool === "measure" ? selectionData.map((p) => ({ xAxis: p[0] })) : [],
+        },
         symbolSize: 8,
         silent: true,
         itemStyle: { color: "#fff", borderColor: "#1197e2", borderWidth: 2 },
         z: 20,
+      },
+      {
+        id: "price-alerts",
+        type: "line",
+        data: [],
+        silent: true,
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: "#e4b55b", width: 1, type: "dashed" },
+          label: {
+            show: true,
+            position: "insideEndTop",
+            formatter: "Alerte",
+            color: "#e4b55b",
+            fontSize: 10,
+          },
+          data: alerts.map((a) => ({ yAxis: a.price })),
+        },
       },
       {
         id: "candles",
@@ -737,7 +786,7 @@ export function TerminalCanvas({
         type: "line",
         data: drawingData,
         connectNulls: false,
-        showSymbol: true,
+        showSymbol: false,
         symbolSize: 5,
         lineStyle: { color: "#b29cff", width: 2 },
         itemStyle: { color: "#b29cff" },
@@ -756,7 +805,12 @@ export function TerminalCanvas({
     <div
       role="img"
       aria-label={`Graphique ${history.symbol}, achats, ventes et indicateurs sélectionnés`}
-      style={{ position: "relative", cursor: tool === "cursor" ? "crosshair" : "copy" }}
+      style={{
+        position: "relative",
+        height,
+        minHeight: 0,
+        cursor: tool === "cursor" ? "crosshair" : tool === "measure" ? "crosshair" : "copy",
+      }}
     >
       {comparison && (
         <div
@@ -770,15 +824,11 @@ export function TerminalCanvas({
           </strong>
           <div className="text-xs text-muted-foreground">
             {chartPrice(comparison.from)} → {chartPrice(comparison.to)}
+            <span className="block">{comparison.candles} bougies</span>
           </div>
         </div>
       )}
-      <EChart
-        option={option}
-        height={layout.active.length >= 3 ? "clamp(740px, calc(100dvh - 190px), 1500px)" : height}
-        preserveZoom
-        onReady={ready}
-      />
+      <EChart option={option} height="100%" preserveZoom onReady={ready} />
     </div>
   );
 }

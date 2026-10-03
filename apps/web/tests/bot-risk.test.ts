@@ -11,6 +11,7 @@ const fills = [
     quantity: 2,
     price: 100,
     fee: 0,
+    source: "import" as const,
     executedAt: "2026-10-01T10:00:00Z",
   },
   {
@@ -21,6 +22,7 @@ const fills = [
     quantity: 1,
     price: 110,
     fee: 0,
+    source: "import" as const,
     executedAt: "2026-10-01T11:00:00Z",
   },
   {
@@ -31,6 +33,7 @@ const fills = [
     quantity: 1,
     price: 120,
     fee: 0,
+    source: "import" as const,
     executedAt: "2026-10-01T12:00:00Z",
   },
 ];

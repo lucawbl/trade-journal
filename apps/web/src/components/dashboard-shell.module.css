@@ -272,3 +272,7 @@
 .shell[data-terminal="true"] .toggle {
   top: 41px;
 }
+.shell:fullscreen {
+  height: 100dvh;
+  overflow-y: auto;
+}

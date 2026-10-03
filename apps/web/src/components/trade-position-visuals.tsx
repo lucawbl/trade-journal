@@ -3,7 +3,25 @@ import { number, priceNumber } from "@/lib/journal-format";
 import { Panel, PnlValue } from "./journal-view";
 
 /** Summaries of recorded executions only; no current market price or unrealized result. */
-export function TradePositionVisuals({ trade, currency }: { trade: RoundTrip; currency: string }) {
+export type TradePositionSummary = Pick<
+  RoundTrip,
+  | "quantity"
+  | "openQuantity"
+  | "avgEntry"
+  | "avgExit"
+  | "direction"
+  | "grossPnl"
+  | "fees"
+  | "netPnl"
+  | "status"
+>;
+export function TradePositionVisuals({
+  trade,
+  currency,
+}: {
+  trade: TradePositionSummary;
+  currency: string;
+}) {
   const remaining =
     trade.quantity > 0 ? Math.min(1, Math.max(0, trade.openQuantity / trade.quantity)) : null;
   const circumference = 2 * Math.PI * 44;

@@ -12,10 +12,10 @@ import styles from "./ai-chat.module.css";
 
 type Message = { id: number; role: "user" | "assistant"; content: string };
 
-export function AiChat() {
+export function AiChat({ initialMessage = "" }: { initialMessage?: string }) {
   const { data, error, loading, refresh } = useApi<AiSettingsPayload>("/api/settings");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialMessage);
   const [failure, setFailure] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);

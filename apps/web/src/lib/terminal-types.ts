@@ -7,6 +7,8 @@ export interface TerminalTrade {
   direction: string;
   status: string;
   openedAt: string;
+  closedAt: string | null;
+  currency: string;
   avgEntry: number;
   openQuantity: number;
   netPnl: number;
