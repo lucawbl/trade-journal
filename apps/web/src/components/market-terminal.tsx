@@ -606,7 +606,7 @@ export function MarketTerminal({
       )}
       <div className={s.workspace}>
         <aside className={s.tools} aria-label="Outils de dessin">
-          {toolButton("cursor", "Curseur et déplacement", Crosshair)}
+          {toolButton("cursor", "Suivre le cours · deux doigts pour mesurer", Crosshair)}
           {toolButton("trend", "Ligne de tendance", Spline)}
           {toolButton("horizontal", "Ligne horizontale", Minus)}
           {toolButton("measure", "Mesurer une variation", Ruler)}

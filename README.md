@@ -403,3 +403,8 @@ hover summary retains their count. Risk shading and borders use lower contrast.
 The chart cursor uses a thin crosshair with axis labels and a stationary compact
 hover card. Wheel zoom no longer triggers the card; pointer drag hides details
 until the gesture ends. Trade detail hover shows only the candle OHLC summary.
+
+The main chart cursor snaps its selection to candle close prices. On touch
+screens one finger follows the price; two fingers compare the chronologically
+ordered candle closes and display signed percentage change. Touch comparison
+pauses chart pan/pinch gestures, then restores navigation when touches end.

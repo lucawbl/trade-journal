@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { CandlestickChart, ScatterChart } from "echarts/charts";
 import {
@@ -87,6 +87,10 @@ export function TerminalCanvas({
   const bars = history.bars;
   const hoverAxis = useRef(0);
   const dragging = useRef(false);
+  const [comparison, setComparison] = useState<{ from: number; to: number; change: number } | null>(
+    null,
+  );
+  const comparing = useRef(false);
   const layout = indicatorLayout(indicators);
   const latest = useRef({ tool, bars, onDraw, onMeasure, onReady });
   latest.current = { tool, bars, onDraw, onMeasure, onReady };
@@ -99,12 +103,33 @@ export function TerminalCanvas({
   const ready = (chart: TerminalChart) => {
     instance.current = chart;
     latest.current.onReady(chart);
+    const follow = (x: number, y: number) => {
+      if (latest.current.tool !== "cursor" || comparing.current || dragging.current) return;
+      if (!chart.containPixel({ gridIndex: 0 }, [x, y])) return;
+      const values = chart.convertFromPixel({ gridIndex: 0 }, [x, y]) as number[];
+      const index = Math.max(
+        0,
+        Math.min(latest.current.bars.length - 1, Math.round(values[0] ?? 0)),
+      );
+      const bar = latest.current.bars[index];
+      if (!bar) return;
+      const point = chart.convertToPixel({ gridIndex: 0 }, [index, bar.close]) as number[];
+      chart.setOption({ series: [{ id: "cursor-points", data: [[index, bar.close]] }] });
+      chart.dispatchAction({ type: "showTip", x: point[0], y: point[1] });
+    };
     const hover = (event: MouseEvent) => {
       const rect = chart.getDom().getBoundingClientRect();
       hoverAxis.current =
         [0, 1, 2, 3, 4].find((gridIndex) =>
           chart.containPixel({ gridIndex }, [event.clientX - rect.left, event.clientY - rect.top]),
         ) ?? 0;
+      if (hoverAxis.current === 0) follow(event.clientX - rect.left, event.clientY - rect.top);
+      else if (!dragging.current)
+        chart.dispatchAction({
+          type: "showTip",
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        });
     };
     const down = () => {
       dragging.current = true;
@@ -113,6 +138,80 @@ export function TerminalCanvas({
     const up = () => {
       dragging.current = false;
     };
+    const touches = (event: TouchEvent) => {
+      if (latest.current.tool !== "cursor") return;
+      if (event.touches.length === 1 && !comparing.current) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        dragging.current = false;
+        const touch = event.touches[0];
+        if (!touch) return;
+        const rect = chart.getDom().getBoundingClientRect();
+        chart.setOption({ dataZoom: [{ disabled: true }] });
+        follow(touch.clientX - rect.left, touch.clientY - rect.top);
+        return;
+      }
+      if (event.touches.length !== 2) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      comparing.current = true;
+      dragging.current = false;
+      const rect = chart.getDom().getBoundingClientRect();
+      const points = Array.from(event.touches)
+        .map((touch) => {
+          const values = chart.convertFromPixel({ gridIndex: 0 }, [
+            touch.clientX - rect.left,
+            touch.clientY - rect.top,
+          ]) as number[];
+          const index = Math.max(
+            0,
+            Math.min(latest.current.bars.length - 1, Math.round(values[0] ?? 0)),
+          );
+          return { index, bar: latest.current.bars[index] };
+        })
+        .sort((a, b) => a.index - b.index);
+      const a = points[0],
+        b = points[1];
+      if (!a?.bar || !b?.bar || a.bar.close <= 0) return;
+      chart.dispatchAction({ type: "hideTip" });
+      chart.setOption({
+        dataZoom: [{ disabled: true }],
+        series: [
+          {
+            id: "cursor-points",
+            data: [
+              [a.index, a.bar.close],
+              [b.index, b.bar.close],
+            ],
+            markLine: {
+              silent: true,
+              symbol: "none",
+              label: { show: false },
+              lineStyle: { color: "#8fa8ca", type: "dashed" },
+              data: [{ xAxis: a.index }, { xAxis: b.index }],
+            },
+          },
+        ],
+      });
+      setComparison({
+        from: a.bar.close,
+        to: b.bar.close,
+        change: (b.bar.close / a.bar.close - 1) * 100,
+      });
+    };
+    const endTouches = (event: TouchEvent) => {
+      if (event.touches.length === 2) return;
+      comparing.current = false;
+      setComparison(null);
+      chart.setOption({
+        dataZoom: [{ disabled: false }],
+        series: [{ id: "cursor-points", data: [], markLine: { data: [] } }],
+      });
+    };
+    chart.getDom().addEventListener("touchstart", touches, { capture: true, passive: false });
+    chart.getDom().addEventListener("touchmove", touches, { capture: true, passive: false });
+    chart.getDom().addEventListener("touchend", endTouches, true);
+    chart.getDom().addEventListener("touchcancel", endTouches, true);
     chart.getDom().addEventListener("pointerdown", down, true);
     document.addEventListener("pointerup", up);
     document.addEventListener("pointercancel", up);
@@ -121,7 +220,7 @@ export function TerminalCanvas({
       const state = latest.current;
       if (state.tool === "cursor") {
         if (chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]))
-          chart.dispatchAction({ type: "showTip", x: event.offsetX, y: event.offsetY });
+          follow(event.offsetX, event.offsetY);
         return;
       }
       if (!chart.containPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY])) return;
@@ -150,6 +249,10 @@ export function TerminalCanvas({
       }
     });
     return () => {
+      chart.getDom().removeEventListener("touchstart", touches, true);
+      chart.getDom().removeEventListener("touchmove", touches, true);
+      chart.getDom().removeEventListener("touchend", endTouches, true);
+      chart.getDom().removeEventListener("touchcancel", endTouches, true);
       chart.getDom().removeEventListener("mousemove", hover, true);
       chart.getDom().removeEventListener("pointerdown", down, true);
       document.removeEventListener("pointerup", up);
@@ -263,7 +366,7 @@ export function TerminalCanvas({
     tooltip: {
       show: tool === "cursor",
       trigger: "axis",
-      triggerOn: "mousemove",
+      triggerOn: "none",
       confine: true,
       backgroundColor: "#161b24",
       borderColor: "#343c4c",
@@ -286,7 +389,9 @@ export function TerminalCanvas({
       formatter: (params) => {
         if (dragging.current) return "";
         const list = Array.isArray(params) ? params : [params];
-        const index = list.find((p) => typeof p.dataIndex === "number")?.dataIndex;
+        const index = list.find(
+          (p) => p.seriesId !== "cursor-points" && typeof p.dataIndex === "number",
+        )?.dataIndex;
         return typeof index === "number" ? tooltipHtml(index) : "";
       },
       position: (_point, _params, _dom, _rect, size) => [
@@ -368,6 +473,16 @@ export function TerminalCanvas({
       })),
     ],
     series: [
+      {
+        id: "cursor-points",
+        name: "Sélection du cours",
+        type: "scatter",
+        data: [],
+        symbolSize: 8,
+        silent: true,
+        itemStyle: { color: "#fff", borderColor: "#1197e2", borderWidth: 2 },
+        z: 20,
+      },
       {
         id: "candles",
         name: "OHLC",
@@ -633,8 +748,23 @@ export function TerminalCanvas({
     <div
       role="img"
       aria-label={`Graphique ${history.symbol}, achats, ventes et indicateurs sélectionnés`}
-      style={{ cursor: tool === "cursor" ? "crosshair" : "copy" }}
+      style={{ position: "relative", cursor: tool === "cursor" ? "crosshair" : "copy" }}
     >
+      {comparison && (
+        <div
+          role="status"
+          data-price-comparison
+          className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 rounded-lg border bg-background/95 px-4 py-2 text-center shadow-lg"
+        >
+          <strong className={comparison.change < 0 ? "text-loss" : "text-profit"}>
+            {comparison.change >= 0 ? "+" : ""}
+            {number(comparison.change, 2)} %
+          </strong>
+          <div className="text-xs text-muted-foreground">
+            {marketPrice(comparison.from)} → {marketPrice(comparison.to)}
+          </div>
+        </div>
+      )}
       <EChart
         option={option}
         height={layout.active.length >= 3 ? "clamp(740px, calc(100dvh - 190px), 1500px)" : height}
