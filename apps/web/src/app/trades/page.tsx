@@ -1,6 +1,7 @@
 import { readFilters } from "@luxalgo/journal-core";
-import { JournalShell, Panel, SummaryMetrics } from "@/components/journal-view";
-import { HistoryAnalysis } from "@/components/history-analysis";
+import { Download } from "lucide-react";
+import { JournalShell, Panel } from "@/components/journal-view";
+import { HistoryAnalysis, HistorySummary } from "@/components/history-analysis";
 import { HistoryTrades } from "@/components/history-trades";
 import { readJournalView, requireJournalSession } from "@/server/journal-view";
 
@@ -15,23 +16,20 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
   const view = readJournalView(filters);
   const exportQuery = new URLSearchParams({ ...filters, format: "csv" }).toString();
   return (
-    <JournalShell title="Historique & analyses" active="trades">
+    <JournalShell title="Historique" active="trades">
       <div className="flex justify-end">
         <a
           href={`/api/export?${exportQuery}`}
-          className="rounded-md border px-4 py-2 text-sm hover:bg-secondary"
+          className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-secondary"
+          aria-label="Exporter les trades de cette sélection en CSV"
         >
-          Exporter cette sélection en CSV
+          <Download className="h-4 w-4" aria-hidden="true" /> CSV
         </a>
       </div>
-      <SummaryMetrics view={view} />
+      <HistorySummary view={view} />
       <HistoryAnalysis view={view} />
       <Panel title={`${view.rows.length} trade${view.rows.length === 1 ? "" : "s"}`}>
         <HistoryTrades view={view} />
-        <p className="mt-4 text-xs text-muted-foreground">
-          Déplie un trade pour voir ses détails et accéder aux exécutions. Le P&L des sorties
-          partielles n’entre dans les statistiques clôturées qu’à la clôture complète.
-        </p>
       </Panel>
     </JournalShell>
   );

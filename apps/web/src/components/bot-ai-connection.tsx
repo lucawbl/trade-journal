@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ArrowUpRight, ChevronDown } from "lucide-react";
 import {
   AI_DEFAULT_MODELS,
   AI_PROVIDER_NAMES,
@@ -11,7 +11,13 @@ import {
 } from "@/lib/ai-settings";
 import { postJson, useApi } from "@/lib/use-api";
 
-export function BotAiConnection({ onSaved }: { onSaved?: () => void }) {
+export function BotAiConnection({
+  onSaved,
+  showWhenMissing = false,
+}: {
+  onSaved?: () => void;
+  showWhenMissing?: boolean;
+}) {
   const { data, error, loading, refresh } = useApi<AiSettingsPayload>("/api/settings");
   const [provider, setProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState(AI_DEFAULT_MODELS.openai);
@@ -21,6 +27,8 @@ export function BotAiConnection({ onSaved }: { onSaved?: () => void }) {
   const [saved, setSaved] = useState(false);
   const [verified, setVerified] = useState(false);
   const saving = useRef(false);
+  const panel = useRef<HTMLDetailsElement>(null);
+  const revealed = useRef(false);
   const id = useId();
 
   useEffect(() => {
@@ -29,6 +37,13 @@ export function BotAiConnection({ onSaved }: { onSaved?: () => void }) {
     setProvider(next);
     setModel(data.aiConnections[next].model);
   }, [data]);
+
+  useEffect(() => {
+    if (showWhenMissing && data && !data.aiConfigured && !revealed.current) {
+      if (panel.current) panel.current.open = true;
+      revealed.current = true;
+    }
+  }, [showWhenMissing, data]);
 
   const connection = data?.aiConnections[provider];
   const environment = connection?.source === "environment";
@@ -93,7 +108,7 @@ export function BotAiConnection({ onSaved }: { onSaved?: () => void }) {
   };
 
   return (
-    <details className="group min-w-0 rounded-xl border bg-card">
+    <details ref={panel} className="group min-w-0 rounded-xl border bg-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm [&::-webkit-details-marker]:hidden">
         <span className="font-medium">
           {data?.aiConfigured ? "Connexion IA" : "Connecter l’IA"}
@@ -210,9 +225,10 @@ export function BotAiConnection({ onSaved }: { onSaved?: () => void }) {
               }
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block text-xs text-brand hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-brand hover:underline"
             >
-              Obtenir une clé {name} ↗
+              Obtenir une clé {name}
+              <ArrowUpRight size={12} aria-hidden="true" />
             </a>
           )}
           {(error || failure) && (

@@ -5,7 +5,7 @@ export const number = (value: number | null | undefined, digits = 2) =>
         minimumFractionDigits: digits,
         maximumFractionDigits: digits,
       })
-        .formatToParts(value)
+        .formatToParts(value === 0 ? 0 : value)
         .map((part) => (part.type === "group" ? "'" : part.type === "decimal" ? "," : part.value))
         .join("")
     : "—";

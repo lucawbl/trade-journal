@@ -136,6 +136,9 @@ export function summarizeBotTrades(
   const closed = trades.filter((trade) => trade.status !== "open");
   return {
     closedTrades: closed.length,
+    wins: closed.filter((trade) => trade.status === "win").length,
+    losses: closed.filter((trade) => trade.status === "loss").length,
+    breakeven: closed.filter((trade) => trade.status === "breakeven").length,
     openTrades: trades.length - closed.length,
     netPnl: closed.reduce((sum, trade) => sum + trade.netPnl, 0),
     // Open round trips already contain realized partial exits and incurred fees.

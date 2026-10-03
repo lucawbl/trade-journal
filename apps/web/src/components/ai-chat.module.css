@@ -1,0 +1,242 @@
+.studio {
+  width: 100%;
+  max-width: 900px;
+  min-width: 0;
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+.toolbar,
+.provider {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.toolbar {
+  justify-content: space-between;
+}
+.provider {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.provider > svg {
+  color: var(--brand);
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.reset {
+  padding: 8px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+}
+.reset:disabled {
+  opacity: 0.4;
+}
+.reset:hover:enabled {
+  background: var(--secondary);
+}
+.chat {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.messages {
+  min-height: min(40dvh, 340px);
+  max-height: min(58dvh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 16px 4px;
+}
+.empty {
+  margin: auto 0;
+  padding: 22px 8px;
+  text-align: center;
+}
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  color: var(--brand);
+  background: #6a9aee15;
+}
+.empty h2 {
+  margin-top: 15px;
+  font-size: clamp(22px, 4vw, 30px);
+  font-weight: 600;
+}
+.empty p {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+.prompts button {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.prompts button:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.user,
+.assistant {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.user {
+  max-width: 85%;
+  align-self: flex-end;
+  border-radius: 20px 20px 5px 20px;
+  padding: 10px 16px;
+  background: #6a9aee1a;
+}
+.assistant {
+  max-width: 96%;
+  align-self: flex-start;
+  padding: 0 4px;
+}
+.user p,
+.assistant > p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.assistant > * + * {
+  margin-top: 10px;
+}
+.assistant ul,
+.assistant ol {
+  padding-left: 20px;
+}
+.assistant ul {
+  list-style-type: disc;
+}
+.assistant ol {
+  list-style-type: decimal;
+}
+.assistant h1,
+.assistant h2,
+.assistant h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.assistant a {
+  color: var(--brand);
+  text-decoration: underline;
+}
+.assistant pre {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--card);
+  padding: 12px;
+  font-size: 12px;
+}
+.assistant code {
+  font-size: 12px;
+}
+.assistant blockquote {
+  border-left: 2px solid var(--brand);
+  padding-left: 12px;
+  color: var(--muted-foreground);
+}
+.composerArea {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding: 12px 0 max(10px, env(safe-area-inset-bottom));
+  background: var(--background);
+}
+.composer {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: var(--card);
+  padding: 8px 10px 8px 18px;
+}
+.composer:focus-within {
+  border-color: var(--brand);
+}
+.composer textarea {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 140px;
+  padding: 10px 0;
+  resize: none;
+  overflow-y: auto;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font-size: 16px;
+  line-height: 24px;
+}
+.composer textarea::placeholder {
+  color: var(--muted-foreground);
+}
+.composer textarea:disabled {
+  opacity: 0.6;
+}
+.send {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #081224;
+}
+.send:disabled {
+  background: var(--secondary);
+  color: var(--muted-foreground);
+}
+.reset:focus-visible,
+.send:focus-visible,
+.prompts button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+.note {
+  padding-top: 7px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+@media (max-width: 760px) {
+  .messages {
+    min-height: min(30dvh, 250px);
+    max-height: min(46dvh, 430px);
+    gap: 17px;
+  }
+  .empty {
+    padding: 16px 0;
+  }
+  .composer {
+    padding-left: 14px;
+  }
+}

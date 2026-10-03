@@ -241,6 +241,9 @@ describe("proposal validation and arithmetic", () => {
     );
     expect(result).toEqual({
       closedTrades: 2,
+      wins: 1,
+      losses: 1,
+      breakeven: 0,
       openTrades: 1,
       netPnl: 3,
       realizedPnl: 6,
@@ -249,6 +252,9 @@ describe("proposal validation and arithmetic", () => {
       currency: "USDT",
     });
     expect(summarizeBotTrades([], "USDT").winRate).toBeNull();
+    expect(summarizeBotTrades([{ status: "breakeven", netPnl: 0, fees: 0 }], "USDT")).toMatchObject(
+      { closedTrades: 1, wins: 0, losses: 0, breakeven: 1, winRate: 0 },
+    );
   });
 
   it("rejects unsafe model proposals and refuses to change the user's explicit draft", () => {

@@ -3,14 +3,8 @@ import { readBotRisk } from "@/server/bot-risk";
 import { priceNumber } from "@/lib/journal-format";
 import { notFound } from "next/navigation";
 import { ExecutionCharts } from "@/components/execution-charts";
-import {
-  JournalShell,
-  Panel,
-  PnlValue,
-  Status,
-  number,
-  timestamp,
-} from "@/components/journal-view";
+import { TradePositionVisuals } from "@/components/trade-position-visuals";
+import { JournalShell, Panel, Status, number, timestamp } from "@/components/journal-view";
 import { readJournalView, requireJournalSession } from "@/server/journal-view";
 import { getTradeByKey, rowToTrade } from "@/server/trades-query";
 import { listExecutions } from "@/server/executions";
@@ -36,12 +30,22 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
           href={`/trades?accounts=${encodeURIComponent(row.accountId)}`}
           className="text-sm text-brand hover:underline"
         >
-          ← Retour aux trades
+          ← Historique
         </a>
         <Status trade={{ ...row, status: trade.status }} />
       </div>
-      <Panel title="Détail de la position">
-        <dl className="grid gap-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <TradePositionVisuals trade={trade} currency={currency} />
+      <Panel title="Marché · SL / TP">
+        <TradeRiskChart trade={trade} fills={fills} risk={risk} timeZone={view.timeZone} />
+      </Panel>
+      <Panel title="Exécutions">
+        <ExecutionCharts trade={trade} fills={fills} currency={currency} timeZone={view.timeZone} />
+      </Panel>
+      <details className="card-sheen min-w-0 rounded-xl border bg-card p-4 sm:p-5">
+        <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand">
+          Détails de la position
+        </summary>
+        <dl className="mt-5 grid gap-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-xs text-muted-foreground">Compte</dt>
             <dd className="mt-1">{account?.name ?? row.accountId}</dd>
@@ -58,46 +62,13 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
             <dt className="text-xs text-muted-foreground">Clôture</dt>
             <dd className="mt-1">{timestamp(row.closedAt, view.timeZone)}</dd>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Quantité entrée / restante</dt>
-            <dd className="tnum mt-1">
-              {number(row.quantity, 4)} / {number(row.openQuantity, 4)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Prix moyen entrée / sortie</dt>
-            <dd className="tnum mt-1">
-              {priceNumber(row.avgEntry)} / {priceNumber(row.avgExit)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Frais enregistrés</dt>
-            <dd className="tnum mt-1">
-              {number(row.fees)} {currency}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">P&L net enregistré</dt>
-            <dd className="mt-1">
-              <PnlValue value={row.netPnl} currency={currency} />
-            </dd>
-          </div>
         </dl>
-        {row.status === "open" && (
-          <p className="mt-5 text-xs text-muted-foreground">
-            Position encore ouverte : le résultat enregistré inclut les sorties partielles et les
-            frais importés. Il ne représente pas le P&L au prix actuel.
-          </p>
-        )}
-      </Panel>
-      <Panel title="Bougies, achats/ventes et niveaux SL / TP">
-        <TradeRiskChart trade={trade} fills={fills} risk={risk} timeZone={view.timeZone} />
-      </Panel>
-      <Panel title="Entrées et sorties">
-        <ExecutionCharts trade={trade} fills={fills} currency={currency} timeZone={view.timeZone} />
-      </Panel>
-      <Panel title={`${fills.length} exécution${fills.length === 1 ? "" : "s"}`}>
-        <div className="overflow-x-auto">
+      </details>
+      <details className="card-sheen min-w-0 rounded-xl border bg-card p-4 sm:p-5">
+        <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand">
+          Journal · {fills.length} exécution{fills.length === 1 ? "" : "s"}
+        </summary>
+        <div className="mt-4 overflow-x-auto">
           <table className="w-full whitespace-nowrap text-left text-sm">
             <caption className="sr-only">Exécutions composant ce trade</caption>
             <thead>
@@ -128,11 +99,14 @@ export default async function TradePage({ params }: { params: Promise<{ key: str
             </tbody>
           </table>
         </div>
-      </Panel>
+      </details>
       {row.notes && (
-        <Panel title="Notes du journal">
-          <p className="whitespace-pre-wrap text-sm">{row.notes}</p>
-        </Panel>
+        <details className="card-sheen min-w-0 rounded-xl border bg-card p-4 sm:p-5">
+          <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand">
+            Notes
+          </summary>
+          <p className="mt-4 whitespace-pre-wrap text-sm">{row.notes}</p>
+        </details>
       )}
     </JournalShell>
   );

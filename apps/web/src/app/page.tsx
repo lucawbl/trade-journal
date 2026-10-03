@@ -1,23 +1,21 @@
-import { DashboardReport } from "@/components/dashboard-report";
+import { dailyStats } from "@luxalgo/journal-core";
 import { DashboardAccounts } from "@/components/dashboard-accounts";
 import { DashboardCalendar } from "@/components/dashboard-calendar";
-import { DashboardTabs } from "@/components/dashboard-tabs";
-import { dailyStats } from "@luxalgo/journal-core";
-import { ResultBars } from "@/components/history-analysis";
+import { DashboardReport } from "@/components/dashboard-report";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { DashboardTabs } from "@/components/dashboard-tabs";
+import { EquityChart, Panel, PnlValue, number, timestamp } from "@/components/journal-view";
 import {
-  EquityChart,
-  Metric,
-  Panel,
-  PnlValue,
-  Status,
-  number,
-  timestamp,
-} from "@/components/journal-view";
+  JournalVisualColumns,
+  JournalVisualDonut,
+  JournalVisualMetric,
+} from "@/components/journal-visual-charts";
 import { priceNumber } from "@/lib/journal-format";
 import { tradePath } from "@/lib/trade-links";
 import { readJournalView, requireJournalSession } from "@/server/journal-view";
+
 export const dynamic = "force-dynamic";
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -34,12 +32,14 @@ export default async function DashboardPage({
         {params.view === "calendar" && <DashboardCalendar params={params} />}
       </DashboardShell>
     );
-  const view = readJournalView(),
-    m = view.overview.metrics;
+  const view = readJournalView();
+  const metrics = view.overview.metrics;
   const currency = view.currencyScope.currency ?? "";
+  const monetary = view.currencyScope.monetary;
   const fees = view.projectedTrades.reduce((total, trade) => total + trade.fees, 0);
   const realized = view.projectedTrades.reduce((total, trade) => total + trade.netPnl, 0);
   const open = view.rows.filter((trade) => trade.status === "open");
+  const activeAccounts = view.accounts.filter((account) => !account.archivedAt);
   const recent = [...view.rows]
     .sort((a, b) => (b.closedAt ?? b.openedAt).localeCompare(a.closedAt ?? a.openedAt))
     .slice(0, 6);
@@ -49,284 +49,258 @@ export default async function DashboardPage({
       <DashboardTabs active="overview" />
       <div className="dashboard-grid">
         <div className="dashboard-equity">
-          <Panel title="Évolution du résultat clôturé">
-            {view.currencyScope.monetary ? (
+          <Panel title="P&L cumulé · clôtures">
+            {monetary ? (
               <EquityChart points={view.overview.equity} currency={currency} detailed />
             ) : (
-              <p className="py-6 text-sm text-muted-foreground">
-                Les comptes utilisent plusieurs devises. Le bilan par compte permet de consulter
-                leurs résultats séparément.
-              </p>
+              <a href="/?view=accounts" className="block py-8 text-sm text-brand">
+                Résultats par compte →
+              </a>
             )}
           </Panel>
         </div>
         <Panel title="Réussite par bot">
           <div className="space-y-5">
-            {view.accounts
-              .filter((a) => !a.archivedAt)
-              .map((account, index) => {
-                const closed = view.rows.filter(
-                  (t) => t.accountId === account.id && t.status !== "open",
-                );
-                const wins = closed.filter((t) => t.netPnl > 0).length;
-                const rate = closed.length ? (wins / closed.length) * 100 : 0;
-                return (
-                  <div key={account.id}>
-                    <div className="mb-2 flex justify-between gap-3 text-xs">
-                      <span className="font-medium">{account.name}</span>
-                      <span className="tnum text-muted-foreground">
-                        {closed.length ? `${number(rate, 0)} %` : "—"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-secondary">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${rate}%`,
-                          backgroundColor: ["#638bea", "#eeac56", "#3abda0"][index % 3],
-                        }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      {wins} gagnant{wins > 1 ? "s" : ""} / {closed.length} clôturé
-                      {closed.length > 1 ? "s" : ""}
-                    </p>
+            {activeAccounts.map((account, index) => {
+              const closed = view.rows.filter(
+                (trade) => trade.accountId === account.id && trade.status !== "open",
+              );
+              const wins = closed.filter((trade) => trade.status === "win").length;
+              const rate = closed.length ? (wins / closed.length) * 100 : 0;
+              const pair = view.rows.find((trade) => trade.accountId === account.id)?.symbol;
+              return (
+                <div key={account.id}>
+                  <div className="mb-2 flex justify-between gap-3 text-xs">
+                    <span className="min-w-0 truncate font-medium" title={account.name}>
+                      {pair?.replace("USDT", "") || account.name}
+                    </span>
+                    <span className="tnum shrink-0">
+                      {closed.length ? `${number(rate, 0)} %` : "—"}
+                    </span>
                   </div>
-                );
-              })}
-            {!view.accounts.some((a) => !a.archivedAt) && (
+                  <div
+                    role="img"
+                    aria-label={`${account.name} : ${wins} gagnants sur ${closed.length} clôtures`}
+                    className="h-2 overflow-hidden rounded-full bg-secondary"
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${rate}%`,
+                        backgroundColor: ["#638bea", "#eeac56", "#3abda0"][index % 3],
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 text-right text-[10px] text-muted-foreground">
+                    {wins}/{closed.length}
+                  </p>
+                </div>
+              );
+            })}
+            {!activeAccounts.length && (
               <p className="text-sm text-muted-foreground">Aucun bot actif.</p>
             )}
-          </div>
-          <div className="mt-6 flex items-center gap-4 border-t pt-4">
-            <div
-              className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full"
-              style={{
-                background: `conic-gradient(#3abda0 ${(m.winRate ?? 0) * 360}deg, var(--secondary) 0deg)`,
-              }}
-              aria-hidden="true"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-card text-sm font-semibold">
-                {m.winRate == null ? "—" : `${number(m.winRate * 100, 0)} %`}
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Réussite globale</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {m.winRate == null
-                  ? "Aucun trade clôturé"
-                  : `${number(m.winRate * 100, 1)} % · ${m.closedTrades} clôtures`}
-              </p>
-            </div>
           </div>
         </Panel>
         <section
           aria-label="Résumé du journal"
           className="dashboard-metrics grid grid-cols-2 gap-3 xl:grid-cols-4"
         >
-          <Metric
-            label="Résultat clôturé"
-            value={
-              view.currencyScope.monetary ? <PnlValue value={m.netPnl} currency={currency} /> : "—"
-            }
-            hint="Clôtures · après frais"
+          <JournalVisualMetric
+            label="P&L clôturé"
+            value={monetary ? <PnlValue value={metrics.netPnl} currency={currency} /> : "—"}
           />
-          <Metric
+          <JournalVisualMetric
             label="Réussite"
-            value={m.winRate == null ? "—" : `${number(m.winRate * 100, 1)} %`}
-            hint={`${m.closedTrades} trade${m.closedTrades === 1 ? "" : "s"} clôturé${m.closedTrades === 1 ? "" : "s"}`}
+            value={metrics.winRate === null ? "—" : `${number(metrics.winRate * 100, 1)} %`}
           />
-          <Metric
-            label="Positions en cours"
-            value={open.length}
-            hint="Sorties partielles incluses"
-          />
-          <Metric
-            label="Total déjà réalisé"
-            value={
-              view.currencyScope.monetary ? <PnlValue value={realized} currency={currency} /> : "—"
-            }
-            hint={`Avec sorties partielles · frais : ${view.currencyScope.monetary ? `${number(fees)} ${currency}` : "devises distinctes"}`}
+          <JournalVisualMetric label="Positions ouvertes" value={open.length} />
+          <JournalVisualMetric
+            label="Réalisé · partielles incluses"
+            value={monetary ? <PnlValue value={realized} currency={currency} /> : "—"}
           />
         </section>
-        <div className="dashboard-metrics">
-          <Panel title="Résultats par jour">
-            {view.currencyScope.monetary ? (
-              <ResultBars
-                items={dailyStats(view.projectedTrades, view.timeZone)
-                  .slice(-7)
-                  .map((day) => ({
-                    label: day.date.split("-").reverse().join("."),
-                    value: day.netPnl,
-                  }))}
-                currency={currency}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Résultats par compte : devises distinctes.
-              </p>
-            )}
-            <p className="mt-2 text-[11px] text-muted-foreground">7 derniers jours avec clôture</p>
-          </Panel>
-        </div>
-        <section aria-labelledby="bots-title" className="dashboard-bots space-y-3">
-          <div>
-            <h2 id="bots-title" className="text-lg font-semibold">
-              Bots et positions
-            </h2>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            {view.accounts
-              .filter((account) => !account.archivedAt)
-              .map((account) => {
-                const positions = open.filter((trade) => trade.accountId === account.id);
-                const accountClosed = view.rows.filter(
-                  (trade) => trade.accountId === account.id && trade.status !== "open",
-                );
-                const accountPnl = accountClosed.reduce((total, trade) => total + trade.netPnl, 0);
-                const pair =
-                  positions[0]?.symbol ??
-                  view.rows.find((trade) => trade.accountId === account.id)?.symbol;
-                return (
-                  <article key={account.id} className="min-w-0 rounded-xl border bg-card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          {pair ? pair.replace("USDT", "") : account.name}
-                        </h3>
-                        <p className="mt-1 text-xs text-muted-foreground">{account.name}</p>
+        <Panel title="14 derniers jours de clôture">
+          <JournalVisualColumns
+            items={dailyStats(monetary ? view.projectedTrades : view.trades, view.timeZone)
+              .slice(-14)
+              .map((day) => ({
+                label: day.date,
+                value: monetary ? day.netPnl : day.trades,
+                trades: day.trades,
+                href: `/trades?from=${day.date}&to=${day.date}&status=closed`,
+              }))}
+            currency={monetary ? currency : ""}
+            monetary={monetary}
+          />
+        </Panel>
+        <Panel title="Répartition des positions">
+          <JournalVisualDonut
+            segments={[
+              { label: "Gagnantes", value: metrics.wins, color: "var(--profit)" },
+              { label: "Perdantes", value: metrics.losses, color: "var(--loss)" },
+              { label: "Équilibre", value: metrics.breakevens, color: "var(--baseline)" },
+              { label: "Ouvertes", value: open.length, color: "var(--brand)" },
+            ]}
+            value={String(metrics.totalTrades)}
+            label="positions"
+          />
+        </Panel>
+        <section aria-labelledby="bots-title" className="dashboard-bots col-span-full space-y-3">
+          <h2 id="bots-title" className="text-lg font-semibold">
+            Bots
+          </h2>
+          <div className="grid min-w-0 gap-3 md:grid-cols-3">
+            {activeAccounts.map((account) => {
+              const positions = open.filter((trade) => trade.accountId === account.id);
+              const accountClosed = view.rows.filter(
+                (trade) => trade.accountId === account.id && trade.status !== "open",
+              );
+              const accountPnl = accountClosed.reduce((total, trade) => total + trade.netPnl, 0);
+              const pair =
+                positions[0]?.symbol ??
+                view.rows.find((trade) => trade.accountId === account.id)?.symbol;
+              return (
+                <article key={account.id} className="min-w-0 rounded-xl border bg-card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold" title={account.name}>
+                      {pair?.replace("USDT", "") || account.name}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {positions.length} ouverte{positions.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-b pb-3 text-xs">
+                    <span className="text-muted-foreground">{accountClosed.length} clôtures</span>
+                    <strong>
+                      <PnlValue value={accountPnl} currency={account.currency} />
+                    </strong>
+                  </div>
+                  {positions.map((trade) => {
+                    const remaining =
+                      trade.quantity > 0
+                        ? Math.max(0, Math.min(100, (trade.openQuantity / trade.quantity) * 100))
+                        : 0;
+                    return (
+                      <div key={trade.key} className="mt-4">
+                        <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+                          <a
+                            href={tradePath(trade.key)}
+                            className="font-medium text-brand hover:underline"
+                          >
+                            {trade.direction === "long" ? "Long" : "Short"} →
+                          </a>
+                          <span className="tnum text-muted-foreground">
+                            {number(remaining, 0)} % restant
+                          </span>
+                        </div>
+                        <div
+                          role="meter"
+                          aria-label={`Quantité restante ${trade.symbol}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={remaining}
+                          aria-valuetext={`${number(remaining, 1)} % de la quantité entrée`}
+                          className="h-2 overflow-hidden rounded-full bg-secondary"
+                        >
+                          <div
+                            className="h-full rounded-full bg-brand"
+                            style={{ width: `${remaining}%` }}
+                          />
+                        </div>
+                        <details className="mt-3 text-xs">
+                          <summary className="cursor-pointer text-muted-foreground">
+                            Position
+                          </summary>
+                          <dl className="mt-3 grid grid-cols-2 gap-3">
+                            <div>
+                              <dt className="text-muted-foreground">Entrée</dt>
+                              <dd className="tnum mt-1">{priceNumber(trade.avgEntry)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Quantité restante</dt>
+                              <dd className="tnum mt-1">{number(trade.openQuantity, 6)}</dd>
+                            </div>
+                            <div className="col-span-2 flex flex-wrap justify-between gap-2">
+                              <dt className="text-muted-foreground">Réalisé</dt>
+                              <dd>
+                                <PnlValue value={trade.netPnl} currency={account.currency} />
+                              </dd>
+                            </div>
+                          </dl>
+                        </details>
                       </div>
-                      <span className="shrink-0 rounded-md bg-secondary px-2 py-1 text-xs">
-                        {positions.length
-                          ? `${positions.length} ouverte${positions.length > 1 ? "s" : ""}`
-                          : "Aucune position"}
-                      </span>
-                    </div>
-                    <dl className="mt-4 border-b pb-4 text-sm">
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">
-                          {account.equity != null ? "Solde reçu" : "Capital de départ"}
+                    );
+                  })}
+                  <details className="mt-4 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">Compte</summary>
+                    <p className="mt-3">{account.name}</p>
+                    <dl className="mt-2 space-y-2">
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <dt>
+                          {account.equity !== null ? "Equity broker" : "Capital initial · journal"}
                         </dt>
-                        <dd className="tnum font-medium">
+                        <dd className="tnum">
                           {number(account.equity ?? account.initialBalance)} {account.currency}
                         </dd>
                       </div>
+                      <div className="break-words">
+                        {timestamp(account.lastSyncAt, view.timeZone)} · {view.timeZone}
+                      </div>
                     </dl>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-                      <span className="text-muted-foreground">
-                        {accountClosed.length} clôture{accountClosed.length === 1 ? "" : "s"} ·
-                        résultat net
-                      </span>
-                      <PnlValue value={accountPnl} currency={account.currency} />
-                    </div>
-                    {positions.length ? (
-                      positions.map((trade) => {
-                        const remaining =
-                          trade.quantity > 0
-                            ? Math.max(
-                                0,
-                                Math.min(100, (trade.openQuantity / trade.quantity) * 100),
-                              )
-                            : 0;
-                        return (
-                          <div key={trade.key} className="mt-4 space-y-3">
-                            <a
-                              href={tradePath(trade.key)}
-                              className="inline-block text-sm font-medium text-brand hover:underline"
-                            >
-                              {trade.direction === "long" ? "Long" : "Short"} ·{" "}
-                              {timestamp(trade.openedAt, view.timeZone)}
-                            </a>
-                            <div className="flex items-center justify-between gap-2">
-                              <Status trade={trade} />
-                              <span className="text-xs text-muted-foreground">
-                                {number(remaining, 1)} % restant
-                              </span>
-                            </div>
-                            <div
-                              role="meter"
-                              aria-label={`Quantité restante ${trade.symbol}`}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              aria-valuenow={remaining}
-                              aria-valuetext={`${number(remaining, 1)} % de la quantité entrée`}
-                              className="h-1.5 overflow-hidden rounded-full bg-secondary"
-                            >
-                              <div
-                                className="h-full rounded-full bg-brand"
-                                style={{ width: `${remaining}%` }}
-                              />
-                            </div>
-                            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                              <div>
-                                <dt className="text-xs text-muted-foreground">
-                                  Prix moyen d’entrée
-                                </dt>
-                                <dd className="tnum mt-1">{priceNumber(trade.avgEntry)}</dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs text-muted-foreground">Quantité restante</dt>
-                                <dd className="tnum mt-1">{number(trade.openQuantity, 6)}</dd>
-                              </div>
-                              <div className="col-span-2 flex items-center justify-between gap-3">
-                                <dt className="text-muted-foreground">Résultat réalisé</dt>
-                                <dd>
-                                  <PnlValue value={trade.netPnl} currency={account.currency} />
-                                </dd>
-                              </div>
-                            </dl>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <p className="mt-4 text-sm text-muted-foreground">Aucune position ouverte.</p>
-                    )}
-                    <p className="mt-5 border-t pt-3 text-xs text-muted-foreground">
-                      Mis à jour : {timestamp(account.lastSyncAt, view.timeZone)} · {view.timeZone}
-                    </p>
-                  </article>
-                );
-              })}
-            {!view.accounts.some((account) => !account.archivedAt) && (
-              <p className="text-sm text-muted-foreground">Aucun compte actif dans le journal.</p>
+                  </details>
+                </article>
+              );
+            })}
+            {!activeAccounts.length && (
+              <p className="text-sm text-muted-foreground">Aucun compte actif.</p>
             )}
           </div>
         </section>
-        <div className="dashboard-recent">
+        <div className="dashboard-recent dashboard-metrics">
           <Panel title="Trades récents">
             {recent.length ? (
-              <ul className="divide-y">
+              <ul className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {recent.map((trade) => (
-                  <li key={trade.key} className="flex items-center justify-between gap-4 py-3">
-                    <div className="min-w-0">
+                  <li key={trade.key} className="min-w-0 rounded-lg border bg-background/40 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                       <a
                         href={tradePath(trade.key)}
                         className="font-medium text-brand hover:underline"
                       >
-                        {trade.symbol.replace("USDT", " / USDT")}
+                        {trade.symbol.replace("USDT", "")} →
                       </a>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {trade.status === "open" ? "Ouvert" : "Clôturé"} ·{" "}
-                        {timestamp(trade.closedAt ?? trade.openedAt, view.timeZone)}
-                      </p>
+                      <PnlValue
+                        value={trade.netPnl}
+                        currency={accountMap.get(trade.accountId)?.currency ?? ""}
+                      />
                     </div>
-                    <PnlValue
-                      value={trade.netPnl}
-                      currency={accountMap.get(trade.accountId)?.currency ?? ""}
-                    />
+                    <p className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${trade.status === "open" ? "bg-brand" : trade.status === "win" ? "bg-profit" : trade.status === "loss" ? "bg-loss" : "bg-muted-foreground"}`}
+                        aria-hidden="true"
+                      />
+                      {trade.status === "open" ? "Ouvert" : "Clôturé"} ·{" "}
+                      {timestamp(trade.closedAt ?? trade.openedAt, view.timeZone)}
+                    </p>
                   </li>
                 ))}
               </ul>
             ) : (
-              <div className="rounded-lg bg-secondary/40 p-5">
-                <p className="text-sm font-medium">Aucun trade enregistré pour le moment.</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Les premiers trades apparaîtront ici dès leur réception.
-                </p>
-              </div>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Aucun trade enregistré.
+              </p>
             )}
           </Panel>
         </div>
+        <details className="dashboard-metrics rounded-lg border px-4 py-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Frais et calculs</summary>
+          <p className="mt-3">
+            Réalisé : résultats enregistrés, sorties partielles incluses. P&L clôturé : positions
+            entièrement clôturées. Frais enregistrés :{" "}
+            {monetary ? `${number(fees)} ${currency}` : "devises distinctes"}.
+          </p>
+        </details>
       </div>
     </DashboardShell>
   );

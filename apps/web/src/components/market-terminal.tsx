@@ -22,6 +22,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  RefreshCw,
   X,
   Download,
 } from "lucide-react";
@@ -678,34 +679,41 @@ export function MarketTerminal({
             <span>
               <span className="text-amber-400">◆</span> Sortie
             </span>
-            <span>
-              <span className="text-loss">■</span> Stop loss
+            <span title="Stop loss de référence · paramètres actuels du bot">
+              <span className="text-loss">■</span> SL
             </span>
-            <span>
-              <span className="text-profit">■</span> Take profit
+            <span title="Take profit de référence · paramètres actuels du bot">
+              <span className="text-profit">■</span> TP
             </span>
+            <span>Références</span>
           </div>
           {tradeHistory && (
             <button
               className={s.button}
+              aria-label="Retour au cours en direct"
               onClick={() => {
                 setPositionOverview(false);
                 setTradeHistory(null);
               }}
             >
-              Retour au cours en direct
+              Direct
             </button>
           )}
           <div className={s.range}>
             <button
               className={`${s.button} ${positionOverview ? s.active : ""}`}
+              aria-label="Afficher les positions du bot"
               aria-pressed={positionOverview}
               onClick={() => setPositionOverview((value) => !value)}
             >
-              Positions du bot
+              Positions
             </button>
-            <button className={s.button} onClick={() => range(0)}>
-              Toutes les bougies
+            <button
+              className={s.button}
+              aria-label="Afficher toutes les bougies"
+              onClick={() => range(0)}
+            >
+              Tout
             </button>
             <button
               className={s.button}
@@ -745,7 +753,7 @@ export function MarketTerminal({
             >
               <div className={s.config}>
                 <label className="min-w-0 flex-1 flex-wrap">
-                  Sélectionner le trade
+                  Trade
                   <select
                     aria-label="Trade affiché sur le graphique"
                     className="min-w-0 w-full max-w-full rounded border bg-background p-2"
@@ -766,44 +774,60 @@ export function MarketTerminal({
                 </label>
                 <button
                   className={s.button}
+                  aria-label="Voir la position sur le graphique"
+                  title="Voir la position sur le graphique"
                   disabled={tradeLoading || !selected}
                   onClick={showTrade}
                 >
-                  {tradeLoading ? "Chargement…" : "Voir la position sur le graphique"}
+                  {tradeLoading ? "Chargement…" : "Afficher"}
                 </button>
-                <button className={s.button} onClick={() => router.refresh()}>
-                  Actualiser les trades
+                <button
+                  className={s.button}
+                  aria-label="Actualiser les trades"
+                  title="Actualiser les trades"
+                  onClick={() => router.refresh()}
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
                 </button>
               </div>
               {selected && (
                 <>
                   <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                     <div>
-                      <dt className={s.muted}>Prix moyen d’entrée</dt>
+                      <dt className={s.muted} title="Prix moyen d’entrée">
+                        Entrée
+                      </dt>
                       <dd>{priceNumber(selected.avgEntry)} USDT</dd>
                     </div>
                     <div>
-                      <dt className={s.muted}>Quantité restante</dt>
+                      <dt className={s.muted} title="Quantité restante">
+                        Restant
+                      </dt>
                       <dd>{number(selected.openQuantity, 6)}</dd>
                     </div>
                     <div>
-                      <dt className={s.muted}>Résultat déjà réalisé</dt>
+                      <dt className={s.muted} title="Résultat déjà réalisé">
+                        Réalisé
+                      </dt>
                       <dd className={selected.netPnl < 0 ? s.down : s.up}>
                         {number(selected.netPnl, 4)} USDT
                       </dd>
                     </div>
                   </dl>
                   <a className="mt-4 inline-block text-sm" href={tradePath(selected.key)}>
-                    Détail des exécutions
+                    Exécutions
                   </a>
                 </>
               )}
-              <p className={`${s.muted} mt-3`}>
-                ▲ Entrées · ◆ Sorties · Un bloc SL/TP par achat, jusqu’à l’exécution suivante
-                (repère visuel). Rectangles ancrés au cours Binance (bougie d’entrée réelle ;
-                chargez la période du trade si elle est hors écran), calculés avec les paramètres
-                actuels du bot. Les exécutions démo/testnet peuvent différer des prix Binance Spot.
-              </p>
+              <details className={`${s.muted} mt-3`}>
+                <summary className="cursor-pointer">Repères SL/TP</summary>
+                <p className="mt-2">
+                  Un bloc par achat, jusqu’à l’exécution suivante. Les rectangles suivent la bougie
+                  d’entrée Binance et les paramètres actuels du bot ; ce sont des repères, pas des
+                  ordres confirmés. Pour une entrée hors écran, cliquez sur Afficher. Les prix réels
+                  démo/testnet restent dans Exécutions.
+                </p>
+              </details>
             </section>
           )}
         </section>

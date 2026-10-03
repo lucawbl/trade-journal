@@ -140,33 +140,8 @@ export function ExecutionCharts({
           Sortie {trade.direction === "long" ? "(vente)" : "(achat)"}
         </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border p-3">
-          <p className="text-xs text-muted-foreground">Entrée moyenne</p>
-          <p className="tnum mt-1 text-sm">
-            {priceNumber(trade.avgEntry)} {currency}
-          </p>
-        </div>
-        <div className="rounded-lg border p-3">
-          <p className="text-xs text-muted-foreground">Sortie moyenne</p>
-          <p className="tnum mt-1 text-sm">
-            {trade.avgExit == null ? "Aucune sortie" : `${priceNumber(trade.avgExit)} ${currency}`}
-          </p>
-        </div>
-        <div className="rounded-lg border p-3">
-          <p className="text-xs text-muted-foreground">Écart de prix dans le sens du trade</p>
-          <p className="tnum mt-1 text-sm">
-            {trade.avgExit == null || trade.avgEntry === 0
-              ? "—"
-              : `${number(((trade.avgExit - trade.avgEntry) / Math.abs(trade.avgEntry)) * (trade.direction === "long" ? 1 : -1) * 100, 2)} %`}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Écart brut des prix moyens, avant frais
-          </p>
-        </div>
-      </div>
       <figure>
-        <h3 className="mb-2 text-sm font-medium">Prix des entrées et sorties</h3>
+        <h3 className="mb-2 text-sm font-medium">Prix exécutés</h3>
         <div className="overflow-x-auto">
           <svg
             viewBox="0 0 820 285"
@@ -225,14 +200,12 @@ export function ExecutionCharts({
           </svg>
         </div>
         <figcaption className="mt-2 text-xs text-muted-foreground">
-          Cliquez sur un point pour afficher ses détails. Les lignes pointillées indiquent les prix
-          moyens d’entrée et de sortie. Les points ne représentent pas le cours du marché entre les
-          ordres · {timeZone}.
+          Points : exécutions · Pointillés : prix moyens
         </figcaption>
       </figure>
       {complete ? (
         <figure>
-          <h3 className="mb-2 text-sm font-medium">Quantité en position après chaque exécution</h3>
+          <h3 className="mb-2 text-sm font-medium">Quantité en position</h3>
           <div className="overflow-x-auto">
             <svg
               viewBox="0 0 820 285"
@@ -269,21 +242,18 @@ export function ExecutionCharts({
             </svg>
           </div>
           <figcaption className="mt-2 text-xs text-muted-foreground">
-            Les entrées augmentent la quantité, les sorties la réduisent. Restant :{" "}
-            {number(trade.openQuantity, 4)} unités
-            {trade.status === "open" ? " · position encore ouverte" : " · position clôturée"}.
+            Restant : {number(trade.openQuantity, 4)} unités ·{" "}
+            {trade.status === "open" ? "Ouverte" : "Clôturée"}
           </figcaption>
         </figure>
       ) : (
         <p role="status" className="text-sm text-muted-foreground">
-          Historique incomplet : la courbe de quantité ne peut pas être reconstituée avec certitude.
+          Exécutions incomplètes · courbe de quantité indisponible
         </p>
       )}
       {selected && (
         <div aria-live="polite" className="rounded-lg border border-brand/30 bg-brand/5 p-4">
-          <p className="font-medium text-sm">
-            {selected.kind === "entry" ? "Entrée sélectionnée" : "Sortie sélectionnée"}
-          </p>
+          <p className="font-medium text-sm">{selected.kind === "entry" ? "Entrée" : "Sortie"}</p>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div>
               <dt className="text-xs text-muted-foreground">Date · {timeZone}</dt>
@@ -296,11 +266,13 @@ export function ExecutionCharts({
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Quantité exécutée</dt>
+              <dt className="text-xs text-muted-foreground">Quantité</dt>
               <dd className="tnum mt-1">{number(selected.quantity, 4)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Position après l’ordre</dt>
+              <dt className="text-xs text-muted-foreground" title="Position après l’ordre">
+                Restant
+              </dt>
               <dd className="tnum mt-1">
                 {complete ? number(selected.position, 4) : "Historique incomplet"}
               </dd>
@@ -308,23 +280,67 @@ export function ExecutionCharts({
           </dl>
         </div>
       )}
-      <div className="flex flex-wrap gap-2" aria-label="Choisir une exécution">
-        {events.map((event, index) => (
-          <button
-            key={event.id}
-            type="button"
-            aria-pressed={selected?.id === event.id}
-            onClick={() => setSelectedId(event.id)}
-            className={`rounded-md border px-3 py-2 text-xs ${selected?.id === event.id ? "border-brand bg-brand/10" : "hover:bg-secondary"}`}
-          >
-            {event.kind === "entry" ? "Entrée" : "Sortie"} {index + 1} · {priceNumber(event.price)}
-          </button>
-        ))}
-      </div>
-      <p className="text-xs text-muted-foreground sm:hidden">
-        Faites défiler les graphiques horizontalement. Les valeurs détaillées sont dans le tableau
-        des exécutions ci-dessous.
-      </p>
+      <details className="rounded-lg border p-3">
+        <summary className="cursor-pointer text-sm">Prix moyens</summary>
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs text-muted-foreground">Entrée</dt>
+            <dd className="tnum mt-1">
+              {priceNumber(trade.avgEntry)} {currency}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Sortie</dt>
+            <dd className="tnum mt-1">
+              {trade.avgExit == null ? "—" : `${priceNumber(trade.avgExit)} ${currency}`}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Variation brute · avant frais</dt>
+            <dd className="tnum mt-1">
+              {trade.avgExit == null || trade.avgEntry === 0
+                ? "—"
+                : `${number(((trade.avgExit - trade.avgEntry) / Math.abs(trade.avgEntry)) * (trade.direction === "long" ? 1 : -1) * 100, 2)} %`}
+            </dd>
+          </div>
+        </dl>
+      </details>
+      <details className="rounded-lg border p-3">
+        <summary className="cursor-pointer text-sm">
+          Choisir une exécution · {events.length}
+        </summary>
+        <div
+          className="mt-3 flex max-h-60 flex-wrap gap-2 overflow-y-auto"
+          aria-label="Choisir une exécution"
+        >
+          {events.map((event, index) => (
+            <button
+              key={event.id}
+              type="button"
+              aria-pressed={selected?.id === event.id}
+              onClick={() => setSelectedId(event.id)}
+              className={`rounded-md border px-3 py-2 text-xs ${selected?.id === event.id ? "border-brand bg-brand/10" : "hover:bg-secondary"}`}
+            >
+              {event.kind === "entry" ? "Entrée" : "Sortie"} {index + 1} ·{" "}
+              {priceNumber(event.price)}
+            </button>
+          ))}
+        </div>
+      </details>
+      <details className="rounded-lg border p-3 text-xs text-muted-foreground">
+        <summary className="cursor-pointer">Lire les exécutions</summary>
+        <div className="mt-3 space-y-2">
+          <p>
+            Appuyez sur un point pour afficher ses détails. Les points montrent les prix exécutés du
+            bot, pas le cours du marché entre les ordres. Les pointillés sont les prix moyens
+            d’entrée et de sortie ; la variation brute suit le sens du trade, avant frais.
+          </p>
+          <p>
+            La quantité augmente aux entrées et diminue aux sorties. Sur mobile, glissez les
+            graphiques horizontalement. Dates : {timeZone}.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

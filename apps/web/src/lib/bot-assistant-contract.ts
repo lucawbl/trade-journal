@@ -13,6 +13,9 @@ export interface BotAssistantBot {
   current: BotRisk | null;
   summary: {
     closedTrades: number;
+    wins: number;
+    losses: number;
+    breakeven: number;
     openTrades: number;
     netPnl: number;
     realizedPnl: number;

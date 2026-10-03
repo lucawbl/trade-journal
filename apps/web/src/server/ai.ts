@@ -18,7 +18,11 @@ Be direct and specific like a good trading coach: name the behavior, cite the nu
 say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
 the trader knows. Keep it tight.`;
 
-export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<string> => {
+export const runAi = async (
+  prompt: string,
+  maxOutputTokens = 1200,
+  options: { system?: string; abortSignal?: AbortSignal } = {},
+): Promise<string> => {
   const provider = getAiProvider();
   const apiKey = getAiKey(provider);
   if (!apiKey) {
@@ -34,9 +38,10 @@ export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<str
           ? createOpenAI({ apiKey }).responses(model)
           : createAnthropic({ apiKey })(model),
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
-      system: SYSTEM,
+      system: options.system ?? SYSTEM,
       prompt,
       maxOutputTokens,
+      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
     });
     if (!result.text.trim()) throw new Error("AI returned no text. Check the model or try again.");
     return result.text;

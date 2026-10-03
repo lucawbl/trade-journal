@@ -25,28 +25,12 @@ export function DashboardShell({
       >
         <div className={styles.heading}>
           <div>
-            <p>
-              {active === "/trades"
-                ? "ANALYSE DES TRADES"
-                : active === "/bot"
-                  ? "ATELIER DU BOT"
-                  : "JOURNAL DES BOTS"}
-            </p>
             <h1>{title}</h1>
-            <span>
-              {description ??
-                (active === "/trades"
-                  ? "Comprends tes résultats et retrouve chaque trade."
-                  : "Les résultats de tes bots, en un coup d’œil.")}
-            </span>
+            {description && <span>{description}</span>}
           </div>
         </div>
         <JournalRefresh hidden />
         {children}
-        <footer className="border-t pt-4 text-xs text-muted-foreground">
-          Résultats après frais enregistrés. Les gains clôturés et les sorties partielles restent
-          distingués.
-        </footer>
       </div>
     </JournalSidebarFrame>
   );

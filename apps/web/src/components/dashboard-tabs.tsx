@@ -35,7 +35,7 @@ export function DashboardTabs({
       className="flex w-full min-w-0 max-w-full gap-1 overflow-x-auto rounded-lg border bg-card p-1 text-sm sm:w-fit"
     >
       {[
-        { key: "overview", href: "/", label: "Vue d’ensemble" },
+        { key: "overview", href: "/", label: "Aperçu" },
         { key: "bilan", href: "/?view=bilan", label: "Bilan" },
         { key: "accounts", href: "/?view=accounts", label: "Comptes" },
         { key: "calendar", href: "/?view=calendar", label: "Par jour" },

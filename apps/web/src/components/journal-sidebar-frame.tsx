@@ -6,6 +6,7 @@ import {
   ChartNoAxesCombined,
   History,
   Bot,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -16,6 +17,7 @@ const navigation = [
   { href: "/market", label: "Marché", icon: ChartNoAxesCombined },
   { href: "/trades", label: "Historique", icon: History },
   { href: "/bot", label: "Bot", icon: Bot },
+  { href: "/ai", label: "IA", icon: Sparkles },
 ];
 
 export function JournalSidebarFrame({

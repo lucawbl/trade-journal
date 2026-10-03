@@ -7,6 +7,7 @@ describe("consistent formatting across server and browser", () => {
     expect(number(-1234.5)).toBe("-1'234,50");
     expect(number(null)).toBe("—");
     expect(number(Infinity)).toBe("—");
+    expect(number(-0)).toBe("0,00");
   });
   it("uses fixed punctuation and the requested timezone, including midnight", () => {
     expect(timestamp("2026-10-01T17:07:00Z", "UTC")).toBe("01.10.2026 · 17:07");
