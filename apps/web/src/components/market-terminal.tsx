@@ -132,6 +132,39 @@ export function MarketTerminal({
     symbolTrades.find((t) => t.key === selectedTrade) ??
     symbolTrades.find((t) => t.status === "open") ??
     symbolTrades[0];
+  const [positionOverview, setPositionOverview] = useState(true);
+  useEffect(() => {
+    if (!positionOverview || !symbolTrades[0]) {
+      setTradeHistory(null);
+      return;
+    }
+    const controller = new AbortController();
+    setTradeLoading(true);
+    void fetch(`/api/trades/${encodeURIComponent(symbolTrades[0].key)}/chart?scope=symbol`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.bars?.length)
+          throw new Error(data.error ?? "Historique indisponible");
+        if (!controller.signal.aborted) {
+          setResolution(data.resolution);
+          setTradeHistory({
+            ...data,
+            price: data.bars.at(-1).close,
+            changePct: 0,
+            marketTime: Date.now(),
+          });
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setNotice(error.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTradeLoading(false);
+      });
+    return () => controller.abort();
+  }, [symbol, positionOverview, trades]);
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("market-terminal-v1") ?? "null");
@@ -625,7 +658,13 @@ export function MarketTerminal({
             </span>
             <span className={s.spacer} />
             <span className={s.muted} data-live-status>
-              {tradeHistory ? "Historique du trade" : replay ? "Replay" : status}
+              {tradeHistory
+                ? positionOverview
+                  ? "Toutes les positions"
+                  : "Historique du trade"
+                : replay
+                  ? "Replay"
+                  : status}
             </span>
           </div>
           {history ? (
@@ -656,11 +695,24 @@ export function MarketTerminal({
             </p>
           )}
           {tradeHistory && (
-            <button className={s.button} onClick={() => setTradeHistory(null)}>
+            <button
+              className={s.button}
+              onClick={() => {
+                setPositionOverview(false);
+                setTradeHistory(null);
+              }}
+            >
               Retour au cours en direct
             </button>
           )}
           <div className={s.range}>
+            <button
+              className={`${s.button} ${positionOverview ? s.active : ""}`}
+              aria-pressed={positionOverview}
+              onClick={() => setPositionOverview((value) => !value)}
+            >
+              Positions du bot
+            </button>
             <button className={s.button} onClick={() => range(0)}>
               Toutes les bougies
             </button>

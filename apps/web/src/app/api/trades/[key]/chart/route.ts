@@ -1,5 +1,5 @@
 import { bad, handler, ok } from "@/server/api";
-import { getTradeByKey } from "@/server/trades-query";
+import { getTradeByKey, queryTrades } from "@/server/trades-query";
 import { binance } from "@/server/market-data/public-crypto";
 import { chartResolution } from "@/lib/bot-risk";
 import { isResolution, RESOLUTIONS } from "@/lib/market-data";
@@ -16,8 +16,13 @@ export const GET = handler(
       closed = trade.closedAt ? Date.parse(trade.closedAt) : now;
     if (!Number.isFinite(opened) || !Number.isFinite(closed) || opened > now)
       return bad("Dates du trade invalides");
-    const from = Math.max(0, opened - 30 * 60_000),
-      to = Math.min(now, closed + 30 * 60_000);
+    const overview = new URL(request.url).searchParams.get("scope") === "symbol";
+    const related = overview ? queryTrades({ symbol: trade.symbol }).rows : [];
+    const earliest = overview
+      ? Math.min(opened, ...related.map((row) => Date.parse(row.openedAt)).filter(Number.isFinite))
+      : opened;
+    const from = Math.max(0, earliest - 30 * 60_000),
+      to = overview ? now : Math.min(now, closed + 30 * 60_000);
     const selected = new URL(request.url).searchParams.get("resolution");
     const resolution = selected && isResolution(selected) ? selected : chartResolution(from, to);
     if (selected && !isResolution(selected)) return bad("Unité de temps invalide");

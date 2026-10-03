@@ -387,3 +387,7 @@ actual execution prices or orders.
 Position rectangles now keep one fixed entry anchor per trade through partial
 exits. Missing entry candles are never replaced by the first visible candle.
 Use See position on chart in the trade panel to load the actual trade period.
+
+Positions du bot opens a common historical period for all trades in the selected
+symbol. It uses the existing authenticated chart route with scope=symbol and
+automatic candle resolution. Return to live remains available from the chart.
