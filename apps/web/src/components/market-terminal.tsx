@@ -2,7 +2,6 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Menu,
   CandlestickChart,
   ChartLine,
   ChartNoAxesCombined,
@@ -82,7 +81,6 @@ export function MarketTerminal({
   const [drawings, setDrawings] = useState<Record<string, Drawing[]>>({}),
     [redo, setRedo] = useState<Drawing[]>([]);
   const [loaded, setLoaded] = useState(false),
-    [nav, setNav] = useState(false),
     [fullscreen, setFullscreen] = useState(false);
   const [panel, setPanel] = useState(false),
     [notice, setNotice] = useState("");
@@ -417,14 +415,6 @@ export function MarketTerminal({
         <span className={s.badge}>Binance Spot · Bots démo / testnet</span>
       </div>
       <header className={s.toolbar}>
-        <button
-          className={s.button}
-          aria-label="Navigation du journal"
-          aria-expanded={nav}
-          onClick={() => setNav((v) => !v)}
-        >
-          <Menu size={19} />
-        </button>
         <select
           aria-label="Crypto en direct"
           value={symbol}
@@ -518,21 +508,6 @@ export function MarketTerminal({
           <Download size={18} />
         </button>
       </header>
-      {nav && (
-        <nav className={s.nav} aria-label="Navigation principale">
-          {[
-            ["/", "Dashboard"],
-            ["/market", "Marché"],
-            ["/trades", "Historique"],
-            ["/accounts", "Comptes"],
-            ["/calendar", "Par jour"],
-          ].map(([href, label]) => (
-            <a key={href} href={href}>
-              {label}
-            </a>
-          ))}
-        </nav>
-      )}
       {triggered.length > 0 && (
         <div role="alert" className={s.notice}>
           {triggered.map((a) => (

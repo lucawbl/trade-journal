@@ -268,3 +268,7 @@
     left: 217px;
   }
 }
+
+.shell[data-terminal="true"] .toggle {
+  top: 41px;
+}

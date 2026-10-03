@@ -1,3 +1,4 @@
+import { JournalSidebarFrame } from "@/components/journal-sidebar-frame";
 import { MarketTerminal } from "@/components/market-terminal";
 import { requireJournalSession, readJournalView } from "@/server/journal-view";
 import { isLiveSymbol, LIVE_SYMBOLS } from "@/lib/live-market";
@@ -41,11 +42,13 @@ export default async function MarketPage({
     };
   });
   return (
-    <MarketTerminal
-      initialSymbol={isLiveSymbol(params.symbol) ? params.symbol : "DOGEUSDT"}
-      initialResolution={isResolution(params.resolution) ? params.resolution : "1m"}
-      timeZone={view.timeZone}
-      trades={trades}
-    />
+    <JournalSidebarFrame active="/market" terminal>
+      <MarketTerminal
+        initialSymbol={isLiveSymbol(params.symbol) ? params.symbol : "DOGEUSDT"}
+        initialResolution={isResolution(params.resolution) ? params.resolution : "1m"}
+        timeZone={view.timeZone}
+        trades={trades}
+      />
+    </JournalSidebarFrame>
   );
 }

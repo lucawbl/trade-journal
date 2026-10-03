@@ -36,7 +36,7 @@
   flex-wrap: wrap;
   gap: 5px;
   min-height: 44px;
-  padding: 4px 10px;
+  padding: 4px 10px 4px 54px;
   border-bottom: 1px solid var(--border);
   background: #090c11;
 }
@@ -256,7 +256,7 @@
   }
   .toolbar {
     gap: 0;
-    padding: 3px;
+    padding: 3px 3px 3px 54px;
   }
   .toolbar .button {
     padding: 7px 6px;

@@ -20,7 +20,15 @@ const navigation = [
   { href: "/calendar", label: "Par jour", icon: CalendarDays },
 ];
 
-export function JournalSidebarFrame({ children, active }: { children: ReactNode; active: string }) {
+export function JournalSidebarFrame({
+  children,
+  active,
+  terminal = false,
+}: {
+  children: ReactNode;
+  active: string;
+  terminal?: boolean;
+}) {
   const [hidden, setHidden] = useState<boolean | null>(null);
   useEffect(() => {
     let initial = window.matchMedia("(max-width: 760px)").matches;
@@ -39,10 +47,14 @@ export function JournalSidebarFrame({ children, active }: { children: ReactNode;
   return (
     <main
       className={styles.shell}
+      data-terminal={terminal}
       data-sidebar-hidden={hidden === true}
       data-sidebar-ready={hidden != null}
     >
-      <a href="#journal-content" className="sr-only focus:not-sr-only focus:p-4">
+      <a
+        href={terminal ? "#market-chart" : "#journal-content"}
+        className="sr-only focus:not-sr-only focus:p-4"
+      >
         Aller au contenu
       </a>
       <button
@@ -90,13 +102,15 @@ export function JournalSidebarFrame({ children, active }: { children: ReactNode;
         </div>
       </aside>
       <div className={styles.workspace}>
-        <header className={styles.header}>
-          <span>
-            Journal des bots /{" "}
-            {navigation.find((item) => item.href === active)?.label ?? "Vue d’ensemble"}
-          </span>
-          <span className={styles.badge}>Environnement démo</span>
-        </header>
+        {!terminal && (
+          <header className={styles.header}>
+            <span>
+              Journal des bots /{" "}
+              {navigation.find((item) => item.href === active)?.label ?? "Vue d’ensemble"}
+            </span>
+            <span className={styles.badge}>Environnement démo</span>
+          </header>
+        )}
         {children}
       </div>
     </main>
