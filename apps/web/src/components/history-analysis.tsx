@@ -2,7 +2,7 @@ import { dailyStats } from "@luxalgo/journal-core";
 import type { JournalView } from "@/server/journal-view";
 import { EquityChart, Panel, number } from "./journal-view";
 
-function ResultBars({
+export function ResultBars({
   items,
   currency,
 }: {

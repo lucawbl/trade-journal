@@ -1,3 +1,5 @@
+import { dailyStats } from "@luxalgo/journal-core";
+import { ResultBars } from "@/components/history-analysis";
 import { DashboardShell } from "@/components/dashboard-shell";
 import {
   EquityChart,
@@ -28,12 +30,7 @@ export default async function DashboardPage() {
     <DashboardShell>
       <div className="dashboard-grid">
         <div className="dashboard-equity">
-          {" "}
           <Panel title="Évolution du résultat clôturé">
-            <p className="mb-4 text-xs text-muted-foreground">
-              Cumul des trades entièrement clôturés. Les résultats des positions en cours figurent
-              dans les cartes des bots.
-            </p>
             {view.currencyScope.monetary ? (
               <EquityChart points={view.overview.equity} currency={currency} detailed />
             ) : (
@@ -113,7 +110,7 @@ export default async function DashboardPage() {
             value={
               view.currencyScope.monetary ? <PnlValue value={m.netPnl} currency={currency} /> : "—"
             }
-            hint="Après frais · positions entièrement clôturées"
+            hint="Clôtures · après frais"
           />
           <Metric
             label="Réussite"
@@ -123,25 +120,41 @@ export default async function DashboardPage() {
           <Metric
             label="Positions en cours"
             value={open.length}
-            hint="Une sortie partielle conserve la position ouverte"
+            hint="Sorties partielles incluses"
           />
           <Metric
             label="Total déjà réalisé"
             value={
               view.currencyScope.monetary ? <PnlValue value={realized} currency={currency} /> : "—"
             }
-            hint={`Clôtures + sorties partielles · frais inclus : ${view.currencyScope.monetary ? `${number(fees)} ${currency}` : "devises distinctes"}`}
+            hint={`Avec sorties partielles · frais : ${view.currencyScope.monetary ? `${number(fees)} ${currency}` : "devises distinctes"}`}
           />
         </section>
+        <div className="dashboard-metrics">
+          <Panel title="Résultats par jour">
+            {view.currencyScope.monetary ? (
+              <ResultBars
+                items={dailyStats(view.projectedTrades, view.timeZone)
+                  .slice(-7)
+                  .map((day) => ({
+                    label: day.date.split("-").reverse().join("."),
+                    value: day.netPnl,
+                  }))}
+                currency={currency}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Résultats par compte : devises distinctes.
+              </p>
+            )}
+            <p className="mt-2 text-[11px] text-muted-foreground">7 derniers jours avec clôture</p>
+          </Panel>
+        </div>
         <section aria-labelledby="bots-title" className="dashboard-bots space-y-3">
           <div>
             <h2 id="bots-title" className="text-lg font-semibold">
               Bots et positions
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Le résultat réalisé inclut les sorties partielles et les frais. Il ne valorise pas la
-              quantité restante au prix actuel.
-            </p>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
             {view.accounts
@@ -208,7 +221,7 @@ export default async function DashboardPage() {
                             <div className="flex items-center justify-between gap-2">
                               <Status trade={trade} />
                               <span className="text-xs text-muted-foreground">
-                                {number(remaining, 1)} % de la quantité conservée
+                                {number(remaining, 1)} % restant
                               </span>
                             </div>
                             <div
@@ -247,13 +260,10 @@ export default async function DashboardPage() {
                         );
                       })
                     ) : (
-                      <p className="mt-4 text-sm text-muted-foreground">
-                        Aucune quantité encore en position dans le journal.
-                      </p>
+                      <p className="mt-4 text-sm text-muted-foreground">Aucune position ouverte.</p>
                     )}
                     <p className="mt-5 border-t pt-3 text-xs text-muted-foreground">
-                      Réception des données : {timestamp(account.lastSyncAt, view.timeZone)} ·{" "}
-                      {view.timeZone}
+                      Mis à jour : {timestamp(account.lastSyncAt, view.timeZone)} · {view.timeZone}
                     </p>
                   </article>
                 );

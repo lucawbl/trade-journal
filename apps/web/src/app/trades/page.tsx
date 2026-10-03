@@ -1,4 +1,3 @@
-import { JournalFilters } from "@/components/journal-filters";
 import { readFilters } from "@luxalgo/journal-core";
 import { JournalShell, Panel, SummaryMetrics } from "@/components/journal-view";
 import { HistoryAnalysis } from "@/components/history-analysis";
@@ -17,12 +16,6 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
   const exportQuery = new URLSearchParams({ ...filters, format: "csv" }).toString();
   return (
     <JournalShell title="Historique & analyses" active="trades">
-      <Panel title="Filtrer l’historique">
-        <JournalFilters action="/trades" accounts={view.accounts} filters={filters} />
-        <p className="mt-3 text-xs text-muted-foreground">
-          Dates de clôture, ou d’ouverture pour les positions ouvertes · Fuseau : {view.timeZone}
-        </p>
-      </Panel>
       <div className="flex justify-end">
         <a
           href={`/api/export?${exportQuery}`}
