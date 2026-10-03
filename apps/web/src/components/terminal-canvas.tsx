@@ -114,10 +114,11 @@ export function TerminalCanvas({
       const bar = latest.current.bars[index];
       if (!bar) return;
       const point = chart.convertToPixel({ gridIndex: 0 }, [index, bar.close]) as number[];
-      chart.setOption({ series: [{ id: "cursor-points", data: [[index, bar.close]] }] });
+      chart.setOption({ series: [{ id: "cursor-points", data: [[index, bar.close]], markLine: { data: [] } }] });
       chart.dispatchAction({ type: "showTip", x: point[0], y: point[1] });
     };
     const hover = (event: MouseEvent) => {
+      if (comparing.current) return;
       const rect = chart.getDom().getBoundingClientRect();
       hoverAxis.current =
         [0, 1, 2, 3, 4].find((gridIndex) =>
@@ -174,6 +175,9 @@ export function TerminalCanvas({
         b = points[1];
       if (!a?.bar || !b?.bar || a.bar.close <= 0) return;
       chart.dispatchAction({ type: "hideTip" });
+      // hideTip does not clear ECharts' independent crosshair. During a
+      // comparison only the two moving guides should remain visible.
+      chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
       chart.setOption({
         dataZoom: [{ disabled: true }],
         series: [
@@ -203,6 +207,8 @@ export function TerminalCanvas({
       if (event.touches.length === 2) return;
       comparing.current = false;
       setComparison(null);
+      chart.dispatchAction({ type: "hideTip" });
+      chart.dispatchAction({ type: "updateAxisPointer", currTrigger: "leave" });
       chart.setOption({
         dataZoom: [{ disabled: false }],
         series: [{ id: "cursor-points", data: [], markLine: { data: [] } }],
@@ -399,7 +405,7 @@ export function TerminalCanvas({
         8,
       ],
     },
-    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    axisPointer: { triggerOn: "none", link: [{ xAxisIndex: "all" }] },
     xAxis: axes,
     yAxis: [
       {
