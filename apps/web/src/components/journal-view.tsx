@@ -289,7 +289,15 @@ export function Status({
   );
 }
 
-export function EquityChart({ points, currency }: { points: EquityPoint[]; currency: string }) {
+export function EquityChart({
+  points,
+  currency,
+  detailed = false,
+}: {
+  points: EquityPoint[];
+  currency: string;
+  detailed?: boolean;
+}) {
   if (!points.length)
     return (
       <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -301,9 +309,9 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
     max = Math.max(...values),
     range = max - min || 1;
   const y = (value: number) => 160 - ((value - min) / range) * 140;
-  const coordinates = values
-    .map((value, index) => `${20 + (index / (values.length - 1)) * 560},${y(value)}`)
-    .join(" ");
+  const x = (index: number) =>
+    (detailed ? 65 : 20) + (index / (values.length - 1)) * (detailed ? 515 : 560);
+  const coordinates = values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
   return (
     <figure>
       <svg
@@ -312,7 +320,46 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
         viewBox="0 0 600 180"
         className="h-48 w-full"
       >
-        <line x1="20" x2="580" y1={y(0)} y2={y(0)} stroke="var(--baseline)" strokeDasharray="4 4" />
+        {detailed &&
+          Array.from({ length: 5 }, (_, index) => {
+            const value = min + (range * index) / 4;
+            return (
+              <g key={index}>
+                <line
+                  x1="65"
+                  x2="580"
+                  y1={y(value)}
+                  y2={y(value)}
+                  stroke="var(--border)"
+                  strokeDasharray="3 4"
+                />
+                <text
+                  x="57"
+                  y={y(value) + 3}
+                  textAnchor="end"
+                  fill="var(--muted-foreground)"
+                  fontSize="12"
+                >
+                  {number(value, Math.min(6, Math.max(0, 2 - Math.floor(Math.log10(range)))))}
+                </text>
+              </g>
+            );
+          })}
+        {detailed && (
+          <polygon
+            points={`${x(0)},${y(0)} ${coordinates} 580,${y(0)}`}
+            fill="var(--brand)"
+            opacity="0.07"
+          />
+        )}
+        <line
+          x1={detailed ? "65" : "20"}
+          x2="580"
+          y1={y(0)}
+          y2={y(0)}
+          stroke="var(--baseline)"
+          strokeDasharray="4 4"
+        />
         <polyline
           points={coordinates}
           fill="none"
@@ -320,6 +367,21 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
           strokeWidth="3"
           strokeLinejoin="round"
         />
+        {detailed &&
+          values.map((value, index) =>
+            index % Math.max(1, Math.ceil(values.length / 20)) === 0 ||
+            index === values.length - 1 ? (
+              <circle
+                key={index}
+                cx={x(index)}
+                cy={y(value)}
+                r="2.5"
+                fill="var(--brand)"
+                stroke="var(--card)"
+                strokeWidth="1"
+              />
+            ) : null,
+          )}
       </svg>
       <figcaption className="flex justify-between text-xs text-muted-foreground">
         <span>Départ : 0 {currency}</span>
