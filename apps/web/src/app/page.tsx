@@ -1,20 +1,14 @@
-import { dailyStats, readFilters } from "@luxalgo/journal-core";
-import { Download } from "lucide-react";
+import { readFilters } from "@luxalgo/journal-core";
+import { ArrowUpRight, Download } from "lucide-react";
 import { DashboardAccounts } from "@/components/dashboard-accounts";
 import { DashboardCalendar } from "@/components/dashboard-calendar";
 import { DashboardReport } from "@/components/dashboard-report";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardTabs } from "@/components/dashboard-tabs";
-import { HistoryAnalysis, HistorySummary } from "@/components/history-analysis";
 import { HistoryTrades } from "@/components/history-trades";
-import { EquityChart, Panel, PnlValue, number, timestamp } from "@/components/journal-view";
-import {
-  JournalVisualColumns,
-  JournalVisualDonut,
-  JournalVisualMetric,
-} from "@/components/journal-visual-charts";
-import { priceNumber } from "@/lib/journal-format";
-import { tradePath } from "@/lib/trade-links";
+import { EquityChart, Panel, PnlValue, number } from "@/components/journal-view";
+import { JournalVisualBars, JournalVisualMetric } from "@/components/journal-visual-charts";
+import { dashboardFocus } from "@/lib/dashboard-focus";
 import { readJournalView, requireJournalSession } from "@/server/journal-view";
 
 export const dynamic = "force-dynamic";
@@ -38,265 +32,180 @@ export default async function DashboardPage({
   const value = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : "");
   const historyFilters = readFilters({ get: value });
   const view = readJournalView();
-  const historyView = readJournalView(historyFilters);
+  const historyView = Object.keys(historyFilters).length ? readJournalView(historyFilters) : view;
   const exportQuery = new URLSearchParams({ ...historyFilters, format: "csv" }).toString();
   const metrics = view.overview.metrics;
   const currency = view.currencyScope.currency ?? "";
   const monetary = view.currencyScope.monetary;
-  const fees = view.projectedTrades.reduce((total, trade) => total + trade.fees, 0);
-  const realized = view.projectedTrades.reduce((total, trade) => total + trade.netPnl, 0);
-  const open = view.rows.filter((trade) => trade.status === "open");
-  const activeAccounts = view.accounts.filter((account) => !account.archivedAt);
+  const focus = dashboardFocus(
+    monetary ? view.projectedTrades : view.trades,
+    view.accounts,
+    monetary,
+  );
+  const lossLarger = focus.avgLoss != null && focus.avgWin != null && focus.avgLoss > focus.avgWin;
+  const historyHref = (accounts: string, status = "closed") =>
+    `/trades?${new URLSearchParams({ accounts, status })}`;
   return (
     <DashboardShell>
-      <DashboardTabs active="overview" />
+      <section aria-label="L’essentiel" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="col-span-2 min-w-0 rounded-xl border bg-card p-4 sm:col-span-1">
+          <p className="text-xs text-muted-foreground">Résultat réalisé</p>
+          <div className="mt-2 text-2xl font-semibold">
+            {focus.realized == null ? "—" : <PnlValue value={focus.realized} currency={currency} />}
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Après frais · sorties partielles incluses
+          </p>
+        </div>
+        <JournalVisualMetric
+          label="Trades gagnants"
+          value={metrics.winRate == null ? "—" : `${number(metrics.winRate * 100, 1)} %`}
+        />
+        <JournalVisualMetric label="Positions ouvertes" value={focus.open} />
+      </section>
       <div className="dashboard-grid">
         <div className="dashboard-equity">
-          <Panel title="P&L cumulé · clôtures">
+          <Panel title="Évolution du résultat">
             {monetary ? (
               <EquityChart points={view.overview.equity} currency={currency} detailed />
             ) : (
               <a href="/?view=accounts" className="block py-8 text-sm text-brand">
-                Résultats par compte →
+                Voir les résultats par devise
               </a>
             )}
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              {focus.closed} trades clôturés · après frais
+            </p>
           </Panel>
         </div>
-        <Panel title="Réussite par bot">
-          <div className="space-y-5">
-            {activeAccounts.map((account, index) => {
-              const closed = view.rows.filter(
-                (trade) => trade.accountId === account.id && trade.status !== "open",
-              );
-              const wins = closed.filter((trade) => trade.status === "win").length;
-              const rate = closed.length ? (wins / closed.length) * 100 : 0;
-              const pair = view.rows.find((trade) => trade.accountId === account.id)?.symbol;
-              return (
-                <div key={account.id}>
-                  <div className="mb-2 flex justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate font-medium" title={account.name}>
-                      {pair?.replace("USDT", "") || account.name}
-                    </span>
-                    <span className="tnum shrink-0">
-                      {closed.length ? `${number(rate, 0)} %` : "—"}
-                    </span>
-                  </div>
-                  <div
-                    role="img"
-                    aria-label={`${account.name} : ${wins} gagnants sur ${closed.length} clôtures`}
-                    className="h-2 overflow-hidden rounded-full bg-secondary"
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${rate}%`,
-                        backgroundColor: ["#638bea", "#eeac56", "#3abda0"][index % 3],
-                      }}
-                    />
-                  </div>
-                  <p className="mt-1 text-right text-[10px] text-muted-foreground">
-                    {wins}/{closed.length}
-                  </p>
-                </div>
-              );
-            })}
-            {!activeAccounts.length && (
-              <p className="text-sm text-muted-foreground">Aucun bot actif.</p>
-            )}
-          </div>
-        </Panel>
-        <section
-          aria-label="Résumé du journal"
-          className="dashboard-metrics grid grid-cols-2 gap-3 xl:grid-cols-4"
-        >
-          <JournalVisualMetric
-            label="P&L clôturé"
-            value={monetary ? <PnlValue value={metrics.netPnl} currency={currency} /> : "—"}
-          />
-          <JournalVisualMetric
-            label="Réussite"
-            value={metrics.winRate === null ? "—" : `${number(metrics.winRate * 100, 1)} %`}
-          />
-          <JournalVisualMetric label="Positions ouvertes" value={open.length} />
-          <JournalVisualMetric
-            label="Réalisé · partielles incluses"
-            value={monetary ? <PnlValue value={realized} currency={currency} /> : "—"}
-          />
-        </section>
-        <section
-          id="historique"
-          aria-labelledby="historique-title"
-          className="col-span-full space-y-4 scroll-mt-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 id="historique-title" className="text-xl font-semibold">
-                Historique des trades
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Toutes les positions enregistrées par les bots, directement dans le Dashboard.
-              </p>
-            </div>
-            <a
-              href={`/api/export?${exportQuery}`}
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-secondary"
-              aria-label="Exporter les trades de cette sélection en CSV"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" /> CSV
-            </a>
-          </div>
-          <HistorySummary view={historyView} />
-          <HistoryAnalysis view={historyView} />
-          <Panel
-            title={`${historyView.rows.length} trade${historyView.rows.length === 1 ? "" : "s"}`}
-          >
-            <HistoryTrades view={historyView} />
-          </Panel>
-        </section>
-        <Panel title="14 derniers jours de clôture">
-          <JournalVisualColumns
-            items={dailyStats(monetary ? view.projectedTrades : view.trades, view.timeZone)
-              .slice(-14)
-              .map((day) => ({
-                label: day.date,
-                value: monetary ? day.netPnl : day.trades,
-                trades: day.trades,
-                href: `/?from=${day.date}&to=${day.date}&status=closed#historique`,
-              }))}
-            currency={monetary ? currency : ""}
-            monetary={monetary}
+        <Panel title={monetary ? "Résultat par bot" : "Réussite par bot"}>
+          <JournalVisualBars
+            items={focus.bots.map((bot) => ({
+              label: bot.label,
+              value: monetary ? bot.netPnl : (bot.winRate ?? 0) * 100,
+              note: bot.closed ? `${bot.closed} clôtures` : "Aucune clôture",
+              href: historyHref(bot.id),
+            }))}
+            currency={monetary ? currency : "%"}
+            signed={monetary}
           />
         </Panel>
-        <Panel title="Répartition des positions">
-          <JournalVisualDonut
-            segments={[
-              { label: "Gagnantes", value: metrics.wins, color: "var(--profit)" },
-              { label: "Perdantes", value: metrics.losses, color: "var(--loss)" },
-              { label: "Équilibre", value: metrics.breakevens, color: "var(--baseline)" },
-              { label: "Ouvertes", value: open.length, color: "var(--brand)" },
-            ]}
-            value={String(metrics.totalTrades)}
-            label="positions"
-          />
-        </Panel>
-        <section aria-labelledby="bots-title" className="dashboard-bots col-span-full space-y-3">
-          <h2 id="bots-title" className="text-lg font-semibold">
-            Bots
+        <section aria-labelledby="improve-title" className="col-span-full space-y-3">
+          <h2 id="improve-title" className="font-semibold">
+            À améliorer
           </h2>
-          <div className="grid min-w-0 gap-3 md:grid-cols-3">
-            {activeAccounts.map((account) => {
-              const positions = open.filter((trade) => trade.accountId === account.id);
-              const accountClosed = view.rows.filter(
-                (trade) => trade.accountId === account.id && trade.status !== "open",
-              );
-              const accountPnl = accountClosed.reduce((total, trade) => total + trade.netPnl, 0);
-              const pair =
-                positions[0]?.symbol ??
-                view.rows.find((trade) => trade.accountId === account.id)?.symbol;
-              return (
-                <article key={account.id} className="min-w-0 rounded-xl border bg-card p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-lg font-semibold" title={account.name}>
-                      {pair?.replace("USDT", "") || account.name}
-                    </h3>
-                    <span className="text-xs text-muted-foreground">
-                      {positions.length} ouverte{positions.length === 1 ? "" : "s"}
-                    </span>
+          <div className="grid min-w-0 gap-3 lg:grid-cols-3">
+            <Panel title="Bot à revoir">
+              {focus.weakest ? (
+                <>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <strong className="text-xl">{focus.weakest.label}</strong>
+                    <PnlValue value={focus.weakest.netPnl} currency={currency} />
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-b pb-3 text-xs">
-                    <span className="text-muted-foreground">{accountClosed.length} clôtures</span>
-                    <strong>
-                      <PnlValue value={accountPnl} currency={account.currency} />
-                    </strong>
-                  </div>
-                  {positions.map((trade) => {
-                    const remaining =
-                      trade.quantity > 0
-                        ? Math.max(0, Math.min(100, (trade.openQuantity / trade.quantity) * 100))
-                        : 0;
-                    return (
-                      <div key={trade.key} className="mt-4">
-                        <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-                          <a
-                            href={tradePath(trade.key)}
-                            className="font-medium text-brand hover:underline"
-                          >
-                            {trade.direction === "long" ? "Long" : "Short"} →
-                          </a>
-                          <span className="tnum text-muted-foreground">
-                            {number(remaining, 0)} % restant
-                          </span>
-                        </div>
-                        <div
-                          role="meter"
-                          aria-label={`Quantité restante ${trade.symbol}`}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={remaining}
-                          aria-valuetext={`${number(remaining, 1)} % de la quantité entrée`}
-                          className="h-2 overflow-hidden rounded-full bg-secondary"
-                        >
-                          <div
-                            className="h-full rounded-full bg-brand"
-                            style={{ width: `${remaining}%` }}
-                          />
-                        </div>
-                        <details className="mt-3 text-xs">
-                          <summary className="cursor-pointer text-muted-foreground">
-                            Position
-                          </summary>
-                          <dl className="mt-3 grid grid-cols-2 gap-3">
-                            <div>
-                              <dt className="text-muted-foreground">Entrée</dt>
-                              <dd className="tnum mt-1">{priceNumber(trade.avgEntry)}</dd>
-                            </div>
-                            <div>
-                              <dt className="text-muted-foreground">Quantité restante</dt>
-                              <dd className="tnum mt-1">{number(trade.openQuantity, 6)}</dd>
-                            </div>
-                            <div className="col-span-2 flex flex-wrap justify-between gap-2">
-                              <dt className="text-muted-foreground">Réalisé</dt>
-                              <dd>
-                                <PnlValue value={trade.netPnl} currency={account.currency} />
-                              </dd>
-                            </div>
-                          </dl>
-                        </details>
-                      </div>
-                    );
-                  })}
-                  <details className="mt-4 text-xs text-muted-foreground">
-                    <summary className="cursor-pointer">Compte</summary>
-                    <p className="mt-3">{account.name}</p>
-                    <dl className="mt-2 space-y-2">
-                      <div className="flex flex-wrap justify-between gap-2">
-                        <dt>
-                          {account.equity !== null ? "Equity broker" : "Capital initial · journal"}
-                        </dt>
-                        <dd className="tnum">
-                          {number(account.equity ?? account.initialBalance)} {account.currency}
-                        </dd>
-                      </div>
-                      <div className="break-words">
-                        {timestamp(account.lastSyncAt, view.timeZone)} · {view.timeZone}
-                      </div>
-                    </dl>
-                  </details>
-                </article>
-              );
-            })}
-            {!activeAccounts.length && (
-              <p className="text-sm text-muted-foreground">Aucun compte actif.</p>
-            )}
+                  <p className="text-xs text-muted-foreground">
+                    Résultat clôturé le plus bas · {focus.weakest.closed} trades
+                  </p>
+                  <a
+                    className="mt-5 inline-flex items-center gap-2 text-sm text-brand"
+                    href={historyHref(focus.weakest.id, "loss")}
+                  >
+                    Voir ses pertes <ArrowUpRight size={15} />
+                  </a>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">
+                  {!monetary
+                    ? "Comparer séparément chaque devise."
+                    : focus.closed
+                      ? "Aucun bot en perte sur ses clôtures."
+                      : "Les premières clôtures permettront la comparaison."}
+                </p>
+              )}
+            </Panel>
+            <Panel title="Gains / pertes moyens">
+              {focus.avgWin != null || focus.avgLoss != null ? (
+                <>
+                  <JournalVisualBars
+                    items={[
+                      ...(focus.avgWin == null
+                        ? []
+                        : [{ label: "Gain moyen", value: focus.avgWin }]),
+                      ...(focus.avgLoss == null
+                        ? []
+                        : [{ label: "Perte moyenne", value: -focus.avgLoss }]),
+                    ]}
+                    currency={currency}
+                  />
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    {lossLarger
+                      ? "Une perte efface plus d’un gain moyen."
+                      : "Moyennes des trades clôturés, après frais."}
+                  </p>
+                  <a className="mt-3 inline-flex items-center gap-2 text-sm text-brand" href="/bot">
+                    {lossLarger ? "Revoir SL / TP" : "Analyser les réglages"}{" "}
+                    <ArrowUpRight size={15} />
+                  </a>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">
+                  {monetary
+                    ? "Pas encore de gain ou de perte clôturée."
+                    : "Devises différentes : moyennes non regroupées."}
+                </p>
+              )}
+            </Panel>
+            <Panel title="Impact des frais">
+              {focus.fees != null && focus.gross != null ? (
+                <>
+                  <JournalVisualBars
+                    items={[
+                      { label: "Avant frais", value: focus.gross },
+                      { label: "Frais", value: -focus.fees },
+                      { label: "Après frais", value: metrics.netPnl },
+                    ]}
+                    currency={currency}
+                  />
+                  <a
+                    className="mt-5 inline-flex items-center gap-2 text-sm text-brand"
+                    href="/trades?status=closed"
+                  >
+                    Vérifier les exécutions <ArrowUpRight size={15} />
+                  </a>
+                </>
+              ) : (
+                <p className="py-6 text-xs text-muted-foreground">
+                  {monetary ? "Aucune clôture à analyser." : "Frais à consulter par compte."}
+                </p>
+              )}
+            </Panel>
           </div>
-        </section>
-        <details className="dashboard-metrics rounded-lg border px-4 py-3 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Frais et calculs</summary>
-          <p className="mt-3">
-            Réalisé : résultats enregistrés, sorties partielles incluses. P&L clôturé : positions
-            entièrement clôturées. Frais enregistrés :{" "}
-            {monetary ? `${number(fees)} ${currency}` : "devises distinctes"}.
+          <p className="text-[10px] text-muted-foreground">
+            Constats sur les clôtures enregistrées · pas de modification automatique des bots
           </p>
+        </section>
+        <details
+          id="dashboard-history"
+          className="col-span-full min-w-0 rounded-xl border bg-card p-4"
+          open={Object.values(historyFilters).some(Boolean)}
+        >
+          <summary className="cursor-pointer font-semibold">
+            Historique{" "}
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              {historyView.rows.length} trades
+            </span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            <div className="flex justify-end">
+              <a
+                href={`/api/export?${exportQuery}`}
+                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs"
+                aria-label="Exporter l’historique en CSV"
+              >
+                <Download size={14} /> CSV
+              </a>
+            </div>
+            <HistoryTrades view={historyView} />
+          </div>
         </details>
       </div>
     </DashboardShell>
