@@ -9,6 +9,7 @@ import {
   Rewind,
   Play,
   Pause,
+  StepBack,
   StepForward,
   Undo2,
   Redo2,
@@ -582,6 +583,17 @@ export function MarketTerminal({
               }}
             >
               {playing ? <Pause size={16} /> : <Play size={16} />}
+            </button>
+            <button
+              className={s.button}
+              aria-label="Bougie précédente"
+              disabled={replayIndex <= 2}
+              onClick={() => {
+                setPlaying(false);
+                setReplayIndex((i) => Math.max(2, i - 1));
+              }}
+            >
+              <StepBack size={16} />
             </button>
             <button
               className={s.button}
