@@ -40,10 +40,6 @@ export default async function DashboardPage({
   const realized = view.projectedTrades.reduce((total, trade) => total + trade.netPnl, 0);
   const open = view.rows.filter((trade) => trade.status === "open");
   const activeAccounts = view.accounts.filter((account) => !account.archivedAt);
-  const recent = [...view.rows]
-    .sort((a, b) => (b.closedAt ?? b.openedAt).localeCompare(a.closedAt ?? a.openedAt))
-    .slice(0, 6);
-  const accountMap = new Map(view.accounts.map((account) => [account.id, account]));
   return (
     <DashboardShell>
       <DashboardTabs active="overview" />
@@ -257,42 +253,6 @@ export default async function DashboardPage({
             )}
           </div>
         </section>
-        <div className="dashboard-recent dashboard-metrics">
-          <Panel title="Trades récents">
-            {recent.length ? (
-              <ul className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {recent.map((trade) => (
-                  <li key={trade.key} className="min-w-0 rounded-lg border bg-background/40 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <a
-                        href={tradePath(trade.key)}
-                        className="font-medium text-brand hover:underline"
-                      >
-                        {trade.symbol.replace("USDT", "")} →
-                      </a>
-                      <PnlValue
-                        value={trade.netPnl}
-                        currency={accountMap.get(trade.accountId)?.currency ?? ""}
-                      />
-                    </div>
-                    <p className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${trade.status === "open" ? "bg-brand" : trade.status === "win" ? "bg-profit" : trade.status === "loss" ? "bg-loss" : "bg-muted-foreground"}`}
-                        aria-hidden="true"
-                      />
-                      {trade.status === "open" ? "Ouvert" : "Clôturé"} ·{" "}
-                      {timestamp(trade.closedAt ?? trade.openedAt, view.timeZone)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Aucun trade enregistré.
-              </p>
-            )}
-          </Panel>
-        </div>
         <details className="dashboard-metrics rounded-lg border px-4 py-3 text-xs text-muted-foreground">
           <summary className="cursor-pointer">Frais et calculs</summary>
           <p className="mt-3">
