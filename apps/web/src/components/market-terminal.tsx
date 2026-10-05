@@ -325,6 +325,18 @@ export function MarketTerminal({
   };
   const range = (start: number) =>
     getChart()?.dispatchAction({ type: "dataZoom", start, end: 100 });
+  const resetZoom = () => {
+    const c = getChart();
+    const total = history?.bars.length ?? 0;
+    if (!c || total <= 1) return;
+    const visible = Math.min(96, total);
+    const startIndex = Math.max(0, total - visible);
+    c.dispatchAction({
+      type: "dataZoom",
+      start: (startIndex / (total - 1)) * 100,
+      end: 100,
+    });
+  };
   const addDrawing = (drawing: Drawing) => {
     setDrawings((d) => ({ ...d, [symbol]: [...(d[symbol] ?? []), drawing].slice(-100) }));
     setRedo([]);
@@ -678,8 +690,9 @@ export function MarketTerminal({
             </button>
             <button
               className={s.button}
-              aria-label="Recentrer le graphique"
-              onClick={() => range(60)}
+              aria-label="Réinitialiser le zoom"
+              title="Réinitialiser le zoom"
+              onClick={resetZoom}
             >
               <RotateCcw size={18} />
             </button>
@@ -759,6 +772,7 @@ export function MarketTerminal({
                   timeZone={timeZone}
                   height="100%"
                   fullPeriod={!!tradeHistory}
+                  replayMode={!!replay}
                   onReady={(c) => {
                     chart.current = c;
                   }}
