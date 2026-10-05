@@ -1,9 +1,12 @@
-import { dailyStats } from "@luxalgo/journal-core";
+import { dailyStats, readFilters } from "@luxalgo/journal-core";
+import { Download } from "lucide-react";
 import { DashboardAccounts } from "@/components/dashboard-accounts";
 import { DashboardCalendar } from "@/components/dashboard-calendar";
 import { DashboardReport } from "@/components/dashboard-report";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardTabs } from "@/components/dashboard-tabs";
+import { HistoryAnalysis, HistorySummary } from "@/components/history-analysis";
+import { HistoryTrades } from "@/components/history-trades";
 import { EquityChart, Panel, PnlValue, number, timestamp } from "@/components/journal-view";
 import {
   JournalVisualColumns,
@@ -32,7 +35,11 @@ export default async function DashboardPage({
         {params.view === "calendar" && <DashboardCalendar params={params} />}
       </DashboardShell>
     );
+  const value = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : "");
+  const historyFilters = readFilters({ get: value });
   const view = readJournalView();
+  const historyView = readJournalView(historyFilters);
+  const exportQuery = new URLSearchParams({ ...historyFilters, format: "csv" }).toString();
   const metrics = view.overview.metrics;
   const currency = view.currencyScope.currency ?? "";
   const monetary = view.currencyScope.monetary;
@@ -116,6 +123,36 @@ export default async function DashboardPage({
             value={monetary ? <PnlValue value={realized} currency={currency} /> : "—"}
           />
         </section>
+        <section
+          id="historique"
+          aria-labelledby="historique-title"
+          className="col-span-full space-y-4 scroll-mt-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 id="historique-title" className="text-xl font-semibold">
+                Historique des trades
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Toutes les positions enregistrées par les bots, directement dans le Dashboard.
+              </p>
+            </div>
+            <a
+              href={`/api/export?${exportQuery}`}
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-secondary"
+              aria-label="Exporter les trades de cette sélection en CSV"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" /> CSV
+            </a>
+          </div>
+          <HistorySummary view={historyView} />
+          <HistoryAnalysis view={historyView} />
+          <Panel
+            title={`${historyView.rows.length} trade${historyView.rows.length === 1 ? "" : "s"}`}
+          >
+            <HistoryTrades view={historyView} />
+          </Panel>
+        </section>
         <Panel title="14 derniers jours de clôture">
           <JournalVisualColumns
             items={dailyStats(monetary ? view.projectedTrades : view.trades, view.timeZone)
@@ -124,7 +161,7 @@ export default async function DashboardPage({
                 label: day.date,
                 value: monetary ? day.netPnl : day.trades,
                 trades: day.trades,
-                href: `/trades?from=${day.date}&to=${day.date}&status=closed`,
+                href: `/?from=${day.date}&to=${day.date}&status=closed#historique`,
               }))}
             currency={monetary ? currency : ""}
             monetary={monetary}
