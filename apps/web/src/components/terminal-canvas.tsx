@@ -41,6 +41,15 @@ echarts.use([
   GraphicComponent,
 ]);
 const marketPrice = (value: number) => (value >= 100 ? number(value, 2) : priceNumber(value));
+const DEFAULT_VISIBLE_CANDLES = 96;
+type ZoomWindow = {
+  startIndex: number;
+  endIndex: number;
+  visible: number;
+  followLatest: boolean;
+};
+const indexPercent = (index: number, total: number) =>
+  total <= 1 ? 0 : (Math.max(0, Math.min(total - 1, index)) / (total - 1)) * 100;
 export type TerminalChart = echarts.ECharts;
 export function TerminalCanvas({
   history,
@@ -57,6 +66,7 @@ export function TerminalCanvas({
   timeZone,
   height,
   fullPeriod = false,
+  replayMode = false,
   onReady,
   onDraw,
   onMeasure,
@@ -75,12 +85,16 @@ export function TerminalCanvas({
   timeZone: string;
   height: string;
   fullPeriod?: boolean;
+  replayMode?: boolean;
   onReady: (chart: TerminalChart) => void;
   onDraw: (drawing: Drawing) => void;
   onMeasure: (text: string) => void;
 }) {
   const instance = useRef<TerminalChart | null>(null);
   const bars = history.bars;
+  const zoomWindow = useRef<ZoomWindow | null>(null);
+  const previousBarCount = useRef(bars.length);
+  const zoomStorageKey = `market-chart-zoom-v2:${history.symbol}:${history.resolution}:${replayMode ? "replay" : "live"}`;
   const hoverAxis = useRef(0);
   const dragging = useRef(false);
   const comparing = useRef(false);
@@ -122,6 +136,106 @@ export function TerminalCanvas({
   const ready = (chart: TerminalChart) => {
     instance.current = chart;
     latest.current.onReady(chart);
+
+    const applyZoom = (startIndex: number, endIndex: number) => {
+      const total = latest.current.bars.length;
+      if (!total) return;
+      const start = Math.max(0, Math.min(total - 1, startIndex));
+      const end = Math.max(start, Math.min(total - 1, endIndex));
+      chart.dispatchAction({
+        type: "dataZoom",
+        start: indexPercent(start, total),
+        end: indexPercent(end, total),
+      });
+    };
+    const saveZoom = () => {
+      const total = latest.current.bars.length;
+      const option = chart.getOption().dataZoom as { start?: number; end?: number }[] | undefined;
+      const zoom = option?.[0];
+      if (!total || !zoom) return;
+      const startPct = Number(zoom.start ?? 0);
+      const endPct = Number(zoom.end ?? 100);
+      const startIndex = Math.max(
+        0,
+        Math.min(total - 1, Math.round((startPct / 100) * Math.max(0, total - 1))),
+      );
+      const endIndex = Math.max(
+        startIndex,
+        Math.min(total - 1, Math.round((endPct / 100) * Math.max(0, total - 1))),
+      );
+      const state: ZoomWindow = {
+        startIndex,
+        endIndex,
+        visible: Math.max(1, endIndex - startIndex + 1),
+        followLatest: endIndex >= total - 2,
+      };
+      zoomWindow.current = state;
+      const currentBars = latest.current.bars;
+      try {
+        localStorage.setItem(
+          zoomStorageKey,
+          JSON.stringify({
+            visible: state.visible,
+            followLatest: state.followLatest,
+            startTime: currentBars[startIndex]?.time ?? null,
+            endTime: currentBars[endIndex]?.time ?? null,
+          }),
+        );
+      } catch {}
+    };
+    const restoreZoom = () => {
+      const currentBars = latest.current.bars;
+      const total = currentBars.length;
+      if (!total) return;
+      if (fullPeriod) {
+        zoomWindow.current = {
+          startIndex: 0,
+          endIndex: total - 1,
+          visible: total,
+          followLatest: true,
+        };
+        applyZoom(0, total - 1);
+        return;
+      }
+      let visible = Math.min(DEFAULT_VISIBLE_CANDLES, total);
+      let startIndex = Math.max(0, total - visible);
+      let endIndex = total - 1;
+      let followLatest = true;
+      try {
+        const saved = JSON.parse(localStorage.getItem(zoomStorageKey) ?? "null") as
+          | {
+              visible?: number;
+              followLatest?: boolean;
+              startTime?: number | null;
+              endTime?: number | null;
+            }
+          | null;
+        if (saved && Number.isFinite(saved.visible) && Number(saved.visible) > 1) {
+          visible = Math.max(2, Math.min(total, Math.round(Number(saved.visible))));
+          if (!replayMode && saved.followLatest === false) {
+            const savedStart = currentBars.findIndex((bar) => bar.time === saved.startTime);
+            const savedEnd = currentBars.findIndex((bar) => bar.time === saved.endTime);
+            if (savedStart >= 0 && savedEnd >= savedStart) {
+              startIndex = savedStart;
+              endIndex = savedEnd;
+              visible = endIndex - startIndex + 1;
+              followLatest = false;
+            } else {
+              startIndex = Math.max(0, total - visible);
+              endIndex = total - 1;
+            }
+          } else {
+            startIndex = Math.max(0, total - visible);
+            endIndex = total - 1;
+          }
+        }
+      } catch {}
+      zoomWindow.current = { startIndex, endIndex, visible, followLatest };
+      applyZoom(startIndex, endIndex);
+    };
+    chart.on("dataZoom", saveZoom);
+    requestAnimationFrame(restoreZoom);
+
     const sample = (x: number, y: number, inside = true) => {
       if (inside && !chart.containPixel({ gridIndex: 0 }, [x, y])) return null;
       const values = chart.convertFromPixel({ gridIndex: 0 }, [x, y]) as number[];
@@ -291,8 +405,45 @@ export function TerminalCanvas({
       document.removeEventListener("pointerup", up);
       document.removeEventListener("pointercancel", up);
       chart.getZr().off("click", click);
+      chart.off("dataZoom", saveZoom);
     };
   };
+
+  useEffect(() => {
+    const chart = instance.current;
+    const previous = previousBarCount.current;
+    previousBarCount.current = bars.length;
+    const state = zoomWindow.current;
+    if (!chart || chart.isDisposed() || !state || bars.length === previous || !bars.length) return;
+    const frame = requestAnimationFrame(() => {
+      if (chart.isDisposed()) return;
+      let startIndex = state.startIndex;
+      let endIndex = state.endIndex;
+      if (fullPeriod) {
+        startIndex = 0;
+        endIndex = bars.length - 1;
+      } else if (state.followLatest) {
+        endIndex = bars.length - 1;
+        startIndex = Math.max(0, endIndex - state.visible + 1);
+      } else {
+        startIndex = Math.max(0, Math.min(bars.length - 1, startIndex));
+        endIndex = Math.max(startIndex, Math.min(bars.length - 1, endIndex));
+      }
+      zoomWindow.current = {
+        startIndex,
+        endIndex,
+        visible: Math.max(1, endIndex - startIndex + 1),
+        followLatest: fullPeriod || state.followLatest,
+      };
+      chart.dispatchAction({
+        type: "dataZoom",
+        start: indexPercent(startIndex, bars.length),
+        end: indexPercent(endIndex, bars.length),
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [bars.length, fullPeriod]);
+
   const times = bars.map((b) => timestamp(new Date(b.time).toISOString(), timeZone));
   const findIndex = (time: number) =>
     bars.findIndex(
@@ -474,11 +625,14 @@ export function TerminalCanvas({
       {
         type: "inside",
         xAxisIndex: [0, 1, 2, 3, 4],
-        start: fullPeriod ? 0 : 60,
+        start: fullPeriod
+          ? 0
+          : indexPercent(Math.max(0, bars.length - Math.min(DEFAULT_VISIBLE_CANDLES, bars.length)), bars.length),
         end: 100,
         filterMode: "none",
         zoomOnMouseWheel: tool === "cursor",
         moveOnMouseMove: tool === "cursor",
+        moveOnMouseWheel: false,
         preventDefaultMouseMove: true,
       },
     ],
