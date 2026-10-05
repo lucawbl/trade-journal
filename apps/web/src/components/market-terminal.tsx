@@ -44,6 +44,7 @@ import {
 } from "@/lib/terminal-indicators";
 import type { TerminalTrade } from "@/lib/terminal-types";
 import type { TerminalChart } from "./terminal-canvas";
+import { tradeWindow, zoomIndices } from "@/lib/terminal-viewport";
 import { isDrawing, percentAlertPrice, replayStart } from "@/lib/terminal-tools";
 import { MarketTradeHistory } from "./market-trade-history";
 import s from "./market-terminal.module.css";
@@ -100,6 +101,7 @@ export function MarketTerminal({
   const [replaySpeed, setReplaySpeed] = useState(1);
   const [tradeHistory, setTradeHistory] = useState<LiveSnapshot | null>(null);
   const [tradeLoading, setTradeLoading] = useState(false);
+  const [focusedTrade, setFocusedTrade] = useState<TerminalTrade | null>(null);
   const showTrade = async (trade: TerminalTrade) => {
     historyRequest.current?.abort();
     const controller = new AbortController();
@@ -109,6 +111,7 @@ export function MarketTerminal({
     setPlaying(false);
     setReplay(null);
     setTradeHistory(null);
+    setFocusedTrade(null);
     setTradeLoading(true);
     try {
       const response = await fetch(`/api/trades/${encodeURIComponent(trade.key)}/chart`, {
@@ -119,6 +122,7 @@ export function MarketTerminal({
         throw new Error(data.error ?? "Aucune bougie disponible");
       if (controller.signal.aborted) return;
       setResolution(data.resolution);
+      setFocusedTrade(trade);
       setTradeHistory({
         ...data,
         price: data.bars.at(-1).close,
@@ -296,6 +300,7 @@ export function MarketTerminal({
     setEnabled(true);
     setPositionOverview(false);
     setTradeHistory(null);
+    setFocusedTrade(null);
     setTradeLoading(false);
     setReplay(null);
     setPlaying(false);
@@ -314,28 +319,39 @@ export function MarketTerminal({
   const zoom = (delta: number) => {
     const c = getChart();
     if (!c) return;
-    const z = (c.getOption().dataZoom as { start: number; end: number }[])[0];
-    if (!z) return;
-    const center = (z.start + z.end) / 2,
-      span = Math.max(3, Math.min(100, (z.end - z.start) * delta));
-    c.dispatchAction({
+    const z = (c.getOption().dataZoom as { startValue: number; endValue: number }[])[0];
+    if (!z || !history) return;
+    const window = zoomIndices(z.startValue, z.endValue, history.bars.length, delta);
+    c.dispatchAction({ type: "dataZoom", startValue: window.start, endValue: window.end });
+  };
+  const range = (start: number) => {
+    const total = history?.bars.length ?? 0;
+    getChart()?.dispatchAction({
       type: "dataZoom",
-      start: Math.max(0, center - span / 2),
-      end: Math.min(100, center + span / 2),
+      startValue: Math.round((start / 100) * Math.max(0, total - 1)),
+      endValue: Math.max(0, total - 1),
     });
   };
-  const range = (start: number) =>
-    getChart()?.dispatchAction({ type: "dataZoom", start, end: 100 });
   const resetZoom = () => {
-    const c = getChart();
     const total = history?.bars.length ?? 0;
-    if (!c || total <= 1) return;
-    const visible = Math.min(96, total);
-    const startIndex = Math.max(0, total - visible);
-    c.dispatchAction({
+    if (total < 2) return;
+    if (focusedTrade && history) {
+      const window = tradeWindow(
+        history.bars,
+        Date.parse(focusedTrade.openedAt),
+        focusedTrade.closedAt ? Date.parse(focusedTrade.closedAt) : history.bars.at(-1)!.time,
+      );
+      getChart()?.dispatchAction({
+        type: "dataZoom",
+        startValue: window.start,
+        endValue: window.end,
+      });
+      return;
+    }
+    getChart()?.dispatchAction({
       type: "dataZoom",
-      start: (startIndex / (total - 1)) * 100,
-      end: 100,
+      startValue: Math.max(0, total - 96),
+      endValue: total - 1,
     });
   };
   const addDrawing = (drawing: Drawing) => {
@@ -766,14 +782,14 @@ export function MarketTerminal({
                   line={line}
                   drawings={drawings[symbol] ?? []}
                   tool={tool}
-                  events={symbolTrades
+                  events={(focusedTrade ? [focusedTrade] : symbolTrades)
                     .flatMap((trade) => trade.events)
                     .filter(
                       (event) =>
                         !replay ||
                         event.time < (history.bars.at(-1)?.time ?? 0) + RESOLUTIONS[resolution],
                     )}
-                  levels={symbolTrades
+                  levels={(focusedTrade ? [focusedTrade] : symbolTrades)
                     .flatMap((trade) => trade.levels)
                     .filter(
                       (level) =>
@@ -784,6 +800,17 @@ export function MarketTerminal({
                   timeZone={timeZone}
                   height="100%"
                   fullPeriod={!!tradeHistory}
+                  focus={
+                    focusedTrade
+                      ? {
+                          key: focusedTrade.key,
+                          from: Date.parse(focusedTrade.openedAt),
+                          to: focusedTrade.closedAt
+                            ? Date.parse(focusedTrade.closedAt)
+                            : history.bars.at(-1)!.time,
+                        }
+                      : undefined
+                  }
                   replayMode={!!replay}
                   onReady={(c) => {
                     chart.current = c;

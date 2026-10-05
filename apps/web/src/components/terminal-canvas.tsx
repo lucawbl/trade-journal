@@ -30,6 +30,7 @@ import { number, priceNumber, timestamp } from "@/lib/journal-format";
 import type { executionChart } from "@/lib/execution-chart";
 import { chartMarkers } from "@/lib/chart-markers";
 import { riskZones } from "@/lib/risk-zones";
+import { candleBounds, tradeWindow, zoomIndices } from "@/lib/terminal-viewport";
 import { drawingPath } from "@/lib/terminal-tools";
 import type { riskTimeline } from "@/lib/bot-risk";
 echarts.use([
@@ -66,6 +67,7 @@ export function TerminalCanvas({
   timeZone,
   height,
   fullPeriod = false,
+  focus,
   replayMode = false,
   onReady,
   onDraw,
@@ -85,6 +87,7 @@ export function TerminalCanvas({
   timeZone: string;
   height: string;
   fullPeriod?: boolean;
+  focus?: { key: string; from: number; to: number };
   replayMode?: boolean;
   onReady: (chart: TerminalChart) => void;
   onDraw: (drawing: Drawing) => void;
@@ -94,7 +97,14 @@ export function TerminalCanvas({
   const bars = history.bars;
   const zoomWindow = useRef<ZoomWindow | null>(null);
   const previousBarCount = useRef(bars.length);
-  const zoomStorageKey = `market-chart-zoom-v2:${history.symbol}:${history.resolution}:${replayMode ? "replay" : "live"}`;
+  const initialWindow = focus
+    ? tradeWindow(bars, focus.from, focus.to)
+    : {
+        start: fullPeriod ? 0 : Math.max(0, bars.length - DEFAULT_VISIBLE_CANDLES),
+        end: bars.length - 1,
+      };
+  const [viewport, setViewport] = useState(initialWindow);
+  const zoomStorageKey = `market-chart-zoom-v2:${history.symbol}:${history.resolution}:${replayMode ? "replay" : (focus?.key ?? "live")}`;
   const hoverAxis = useRef(0);
   const dragging = useRef(false);
   const comparing = useRef(false);
@@ -126,7 +136,7 @@ export function TerminalCanvas({
       dataZoom: [
         {
           disabled: false,
-          zoomOnMouseWheel: tool === "cursor",
+          zoomOnMouseWheel: false,
           moveOnMouseMove: tool === "cursor",
         },
       ],
@@ -151,8 +161,7 @@ export function TerminalCanvas({
     const saveZoom = () => {
       const total = latest.current.bars.length;
       const option = chart.getOption().dataZoom as
-        | { start?: number; end?: number; startValue?: number; endValue?: number }[]
-        | undefined;
+        { start?: number; end?: number; startValue?: number; endValue?: number }[] | undefined;
       const zoom = option?.[0];
       if (!total || !zoom) return;
       const startPct = Number(zoom.start ?? 0);
@@ -161,10 +170,7 @@ export function TerminalCanvas({
       const rawEnd = Number(zoom.endValue);
       const startIndex = Number.isFinite(rawStart)
         ? Math.max(0, Math.min(total - 1, Math.round(rawStart)))
-        : Math.max(
-            0,
-            Math.min(total - 1, Math.round((startPct / 100) * Math.max(0, total - 1))),
-          );
+        : Math.max(0, Math.min(total - 1, Math.round((startPct / 100) * Math.max(0, total - 1))));
       const endIndex = Number.isFinite(rawEnd)
         ? Math.max(startIndex, Math.min(total - 1, Math.round(rawEnd)))
         : Math.max(
@@ -178,6 +184,11 @@ export function TerminalCanvas({
         followLatest: replayMode || endIndex >= total - 2,
       };
       zoomWindow.current = state;
+      setViewport((old) =>
+        old.start === startIndex && old.end === endIndex
+          ? old
+          : { start: startIndex, end: endIndex },
+      );
       const currentBars = latest.current.bars;
       try {
         localStorage.setItem(
@@ -195,6 +206,11 @@ export function TerminalCanvas({
       const currentBars = latest.current.bars;
       const total = currentBars.length;
       if (!total) return;
+      if (focus) {
+        const selected = tradeWindow(currentBars, focus.from, focus.to);
+        applyZoom(selected.start, selected.end);
+        return;
+      }
       if (fullPeriod) {
         zoomWindow.current = {
           startIndex: 0,
@@ -210,14 +226,12 @@ export function TerminalCanvas({
       let endIndex = total - 1;
       let followLatest = true;
       try {
-        const saved = JSON.parse(localStorage.getItem(zoomStorageKey) ?? "null") as
-          | {
-              visible?: number;
-              followLatest?: boolean;
-              startTime?: number | null;
-              endTime?: number | null;
-            }
-          | null;
+        const saved = JSON.parse(localStorage.getItem(zoomStorageKey) ?? "null") as {
+          visible?: number;
+          followLatest?: boolean;
+          startTime?: number | null;
+          endTime?: number | null;
+        } | null;
         if (saved && Number.isFinite(saved.visible) && Number(saved.visible) > 1) {
           visible = Math.max(2, Math.min(total, Math.round(Number(saved.visible))));
           if (!replayMode && saved.followLatest === false) {
@@ -241,6 +255,34 @@ export function TerminalCanvas({
       zoomWindow.current = { startIndex, endIndex, visible, followLatest };
       applyZoom(startIndex, endIndex);
     };
+    const wheelZoom = (event: WheelEvent) => {
+      if (latest.current.tool !== "cursor") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const rect = chart.getDom().getBoundingClientRect();
+      const index = (
+        chart.convertFromPixel({ gridIndex: 0 }, [
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+        ]) as number[]
+      )[0];
+      const state = zoomWindow.current;
+      if (!state || !Number.isFinite(index)) return;
+      const anchor = Math.max(
+        0,
+        Math.min(1, (index! - state.startIndex) / Math.max(1, state.endIndex - state.startIndex)),
+      );
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1);
+      const next = zoomIndices(
+        state.startIndex,
+        state.endIndex,
+        latest.current.bars.length,
+        Math.exp(Math.max(-80, Math.min(80, delta)) * 0.003),
+        anchor,
+      );
+      applyZoom(next.start, next.end);
+    };
+    chart.getDom().addEventListener("wheel", wheelZoom, { capture: true, passive: false });
     chart.on("dataZoom", saveZoom);
     requestAnimationFrame(restoreZoom);
 
@@ -318,6 +360,7 @@ export function TerminalCanvas({
     const up = () => {
       dragging.current = false;
     };
+    let pinch: { distance: number; start: number; end: number; anchor: number } | null = null;
     const touches = (event: TouchEvent) => {
       const tool = latest.current.tool;
       const rect = chart.getDom().getBoundingClientRect();
@@ -330,8 +373,46 @@ export function TerminalCanvas({
           chart.setOption({ dataZoom: [{ disabled: true }] });
           follow(touch.clientX - rect.left, touch.clientY - rect.top);
         } else if (event.touches.length >= 2) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
           clearGuides();
-          chart.setOption({ dataZoom: [{ disabled: false }] });
+          const a = event.touches[0]!,
+            b = event.touches[1]!;
+          const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+          const state = zoomWindow.current;
+          if (!state || distance < 1) return;
+          if (!pinch || event.type === "touchstart") {
+            const point = sample(
+              (a.clientX + b.clientX) / 2 - rect.left,
+              (a.clientY + b.clientY) / 2 - rect.top,
+              false,
+            );
+            pinch = {
+              distance,
+              start: state.startIndex,
+              end: state.endIndex,
+              anchor: point
+                ? Math.max(
+                    0,
+                    Math.min(
+                      1,
+                      (point.index - state.startIndex) /
+                        Math.max(1, state.endIndex - state.startIndex),
+                    ),
+                  )
+                : 0.5,
+            };
+          } else {
+            const next = zoomIndices(
+              pinch.start,
+              pinch.end,
+              latest.current.bars.length,
+              pinch.distance / distance,
+              pinch.anchor,
+            );
+            applyZoom(next.start, next.end);
+          }
+          chart.setOption({ dataZoom: [{ disabled: true }] });
         }
         return;
       }
@@ -351,6 +432,7 @@ export function TerminalCanvas({
     };
     const endTouches = (event: TouchEvent) => {
       if (event.touches.length === 2) return;
+      pinch = null;
       if (comparing.current) {
         setSelection([]);
         first.current = null;
@@ -414,6 +496,7 @@ export function TerminalCanvas({
       document.removeEventListener("pointercancel", up);
       chart.getZr().off("click", click);
       chart.off("dataZoom", saveZoom);
+      chart.getDom().removeEventListener("wheel", wheelZoom, true);
     };
   };
 
@@ -427,7 +510,7 @@ export function TerminalCanvas({
       if (chart.isDisposed()) return;
       let startIndex = state.startIndex;
       let endIndex = state.endIndex;
-      if (fullPeriod) {
+      if (fullPeriod && state.visible === previous) {
         startIndex = 0;
         endIndex = bars.length - 1;
       } else if (state.followLatest) {
@@ -441,7 +524,7 @@ export function TerminalCanvas({
         startIndex,
         endIndex,
         visible: Math.max(1, endIndex - startIndex + 1),
-        followLatest: fullPeriod || state.followLatest,
+        followLatest: state.followLatest,
       };
       chart.dispatchAction({
         type: "dataZoom",
@@ -452,6 +535,7 @@ export function TerminalCanvas({
     return () => cancelAnimationFrame(frame);
   }, [bars.length, fullPeriod]);
 
+  const priceBounds = candleBounds(bars, viewport.start, viewport.end);
   const times = bars.map((b) => timestamp(new Date(b.time).toISOString(), timeZone));
   const findIndex = (time: number) =>
     bars.findIndex(
@@ -594,8 +678,8 @@ export function TerminalCanvas({
       {
         type: log ? "log" : "value",
         scale: true,
-        min: (bounds) => Math.max(bounds.min * 0.99, bounds.min - (bounds.max - bounds.min) * 0.07),
-        max: (bounds) => bounds.max + (bounds.max - bounds.min) * 0.07,
+        min: priceBounds?.min,
+        max: priceBounds?.max,
         position: "right",
         splitNumber: 4,
         axisLabel: { ...label, formatter: chartPrice },
@@ -639,7 +723,7 @@ export function TerminalCanvas({
           : Math.max(0, bars.length - Math.min(DEFAULT_VISIBLE_CANDLES, bars.length)),
         endValue: Math.max(0, bars.length - 1),
         filterMode: "filter",
-        zoomOnMouseWheel: tool === "cursor",
+        zoomOnMouseWheel: false,
         moveOnMouseMove: tool === "cursor",
         moveOnMouseWheel: false,
         preventDefaultMouseMove: true,

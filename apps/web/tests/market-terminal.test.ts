@@ -13,12 +13,21 @@ const state = vi.hoisted(() => ({
 vi.mock("next/dynamic", async () => {
   const { createElement } = await import("react");
   return {
-    default: () => (props: { history: LiveSnapshot }) =>
-      createElement("div", {
-        "data-canvas": "true",
-        "data-resolution": props.history.resolution,
-        "data-count": props.history.bars.length,
-      }),
+    default:
+      () =>
+      (props: {
+        history: LiveSnapshot;
+        focus?: { key: string };
+        events: unknown[];
+        levels: unknown[];
+      }) =>
+        createElement("div", {
+          "data-canvas": "true",
+          "data-resolution": props.history.resolution,
+          "data-count": props.history.bars.length,
+          "data-focus": props.focus?.key,
+          "data-events": props.events.length,
+        }),
   };
 });
 vi.mock("../src/hooks/use-live-market", () => ({
@@ -69,7 +78,17 @@ const trade: TerminalTrade = {
   avgEntry: 100,
   openQuantity: 0,
   netPnl: 1,
-  events: [],
+  events: [
+    {
+      id: "entry",
+      time: 0,
+      price: 100,
+      quantity: 1,
+      position: 1,
+      kind: "entry",
+      executedAt: "2026-10-01T10:00:00Z",
+    },
+  ],
   levels: [],
 };
 function snapshot(resolution: Resolution, count = 100): LiveSnapshot {
@@ -126,7 +145,14 @@ beforeEach(async () => {
       createElement(MarketTerminal, {
         initialSymbol: "BTCUSDT",
         initialResolution: "1m",
-        trades: [trade],
+        trades: [
+          trade,
+          {
+            ...trade,
+            key: "other-trade",
+            events: trade.events.map((event) => ({ ...event, id: "other-entry" })),
+          },
+        ],
         timeZone: "UTC",
       }),
     ),
@@ -166,6 +192,14 @@ describe("terminal mode regressions", () => {
     await setResolution("1h");
     expect(host.querySelector("[data-replay-progress]")).toBeNull();
     expect(host.querySelector("[data-canvas]")?.getAttribute("data-resolution")).toBe("1h");
+  });
+  it("focuses the requested trade and clears focus on return to live", async () => {
+    await click([...host.querySelectorAll("button")].find((b) => b.textContent === "Trade test")!);
+    expect(host.querySelector("[data-canvas]")?.getAttribute("data-focus")).toBe("t");
+    expect(host.querySelector("[data-canvas]")?.getAttribute("data-events")).toBe("1");
+    await setResolution("1h");
+    expect(host.querySelector("[data-canvas]")?.getAttribute("data-focus")).toBeNull();
+    expect(host.querySelector("[data-canvas]")?.getAttribute("data-events")).toBe("2");
   });
   it("ignores a late trade history response after the user changes the timeframe", async () => {
     let resolve!: (value: unknown) => void;
