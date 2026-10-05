@@ -144,30 +144,38 @@ export function TerminalCanvas({
       const end = Math.max(start, Math.min(total - 1, endIndex));
       chart.dispatchAction({
         type: "dataZoom",
-        start: indexPercent(start, total),
-        end: indexPercent(end, total),
+        startValue: start,
+        endValue: end,
       });
     };
     const saveZoom = () => {
       const total = latest.current.bars.length;
-      const option = chart.getOption().dataZoom as { start?: number; end?: number }[] | undefined;
+      const option = chart.getOption().dataZoom as
+        | { start?: number; end?: number; startValue?: number; endValue?: number }[]
+        | undefined;
       const zoom = option?.[0];
       if (!total || !zoom) return;
       const startPct = Number(zoom.start ?? 0);
       const endPct = Number(zoom.end ?? 100);
-      const startIndex = Math.max(
-        0,
-        Math.min(total - 1, Math.round((startPct / 100) * Math.max(0, total - 1))),
-      );
-      const endIndex = Math.max(
-        startIndex,
-        Math.min(total - 1, Math.round((endPct / 100) * Math.max(0, total - 1))),
-      );
+      const rawStart = Number(zoom.startValue);
+      const rawEnd = Number(zoom.endValue);
+      const startIndex = Number.isFinite(rawStart)
+        ? Math.max(0, Math.min(total - 1, Math.round(rawStart)))
+        : Math.max(
+            0,
+            Math.min(total - 1, Math.round((startPct / 100) * Math.max(0, total - 1))),
+          );
+      const endIndex = Number.isFinite(rawEnd)
+        ? Math.max(startIndex, Math.min(total - 1, Math.round(rawEnd)))
+        : Math.max(
+            startIndex,
+            Math.min(total - 1, Math.round((endPct / 100) * Math.max(0, total - 1))),
+          );
       const state: ZoomWindow = {
         startIndex,
         endIndex,
         visible: Math.max(1, endIndex - startIndex + 1),
-        followLatest: endIndex >= total - 2,
+        followLatest: replayMode || endIndex >= total - 2,
       };
       zoomWindow.current = state;
       const currentBars = latest.current.bars;
@@ -437,8 +445,8 @@ export function TerminalCanvas({
       };
       chart.dispatchAction({
         type: "dataZoom",
-        start: indexPercent(startIndex, bars.length),
-        end: indexPercent(endIndex, bars.length),
+        startValue: startIndex,
+        endValue: endIndex,
       });
     });
     return () => cancelAnimationFrame(frame);
@@ -625,11 +633,12 @@ export function TerminalCanvas({
       {
         type: "inside",
         xAxisIndex: [0, 1, 2, 3, 4],
-        start: fullPeriod
+        rangeMode: ["value", "value"],
+        startValue: fullPeriod
           ? 0
-          : indexPercent(Math.max(0, bars.length - Math.min(DEFAULT_VISIBLE_CANDLES, bars.length)), bars.length),
-        end: 100,
-        filterMode: "none",
+          : Math.max(0, bars.length - Math.min(DEFAULT_VISIBLE_CANDLES, bars.length)),
+        endValue: Math.max(0, bars.length - 1),
+        filterMode: "filter",
         zoomOnMouseWheel: tool === "cursor",
         moveOnMouseMove: tool === "cursor",
         moveOnMouseWheel: false,
