@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard,
   ChartNoAxesCombined,
-  History,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -14,7 +13,6 @@ import styles from "./dashboard-shell.module.css";
 const navigation = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/market", label: "Marché", icon: ChartNoAxesCombined },
-  { href: "/trades", label: "Historique", icon: History },
   { href: "/bot", label: "Bot", icon: Bot },
 ];
 
