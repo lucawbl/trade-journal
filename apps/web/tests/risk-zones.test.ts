@@ -84,3 +84,18 @@ it("does not relocate an old trade onto the first visible candle", () => {
     ),
   ).toEqual([]);
 });
+
+it("isolates one purchase block while retaining its actual next execution boundary", () => {
+  const levels = [
+    { ...event(0, 2), id: "a" },
+    { ...event(60, 3, 110, 99, 132), id: "b" },
+    { ...event(120, 0), id: "c" },
+  ];
+  expect(riskZones(bars, 60, levels, "takeProfit", "b")).toEqual([
+    [
+      { xAxis: 1, yAxis: 110 },
+      { xAxis: 2, yAxis: 132 },
+    ],
+  ]);
+  expect(riskZones(bars, 60, levels, "takeProfit", "c")).toEqual([]);
+});

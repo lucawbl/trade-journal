@@ -44,7 +44,7 @@ import {
 } from "@/lib/terminal-indicators";
 import type { TerminalTrade } from "@/lib/terminal-types";
 import type { TerminalChart } from "./terminal-canvas";
-import { tradeWindow, zoomIndices } from "@/lib/terminal-viewport";
+import { focusedExecution, tradeWindow, zoomIndices } from "@/lib/terminal-viewport";
 import { isDrawing, percentAlertPrice, replayStart } from "@/lib/terminal-tools";
 import { MarketTradeHistory } from "./market-trade-history";
 import s from "./market-terminal.module.css";
@@ -102,7 +102,10 @@ export function MarketTerminal({
   const [tradeHistory, setTradeHistory] = useState<LiveSnapshot | null>(null);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [focusedTrade, setFocusedTrade] = useState<TerminalTrade | null>(null);
-  const showTrade = async (trade: TerminalTrade) => {
+  const [scaleReset, setScaleReset] = useState(0);
+  const [executionFocus, setExecutionFocus] = useState<ReturnType<typeof focusedExecution>>(null);
+  const showTrade = async (trade: TerminalTrade, executionId?: string, whole = false) => {
+    const target = focusedExecution(trade, executionId, whole);
     historyRequest.current?.abort();
     const controller = new AbortController();
     historyRequest.current = controller;
@@ -112,24 +115,33 @@ export function MarketTerminal({
     setReplay(null);
     setTradeHistory(null);
     setFocusedTrade(null);
+    setExecutionFocus(null);
     setTradeLoading(true);
     try {
-      const response = await fetch(`/api/trades/${encodeURIComponent(trade.key)}/chart`, {
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
-      });
+      const response = await fetch(
+        `/api/trades/${encodeURIComponent(trade.key)}/chart${target ? `?at=${target.from}` : ""}`,
+        {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+        },
+      );
       const data = await response.json();
       if (!response.ok || !data.bars?.length)
         throw new Error(data.error ?? "Aucune bougie disponible");
       if (controller.signal.aborted) return;
       setResolution(data.resolution);
       setFocusedTrade(trade);
+      setExecutionFocus(target);
       setTradeHistory({
         ...data,
         price: data.bars.at(-1).close,
         changePct: 0,
         marketTime: Date.now(),
       });
-      setNotice("Période du trade affichée. Les rectangles partent de sa bougie d’entrée.");
+      setNotice(
+        target
+          ? "Exécution sélectionnée · vue rapprochée"
+          : "Position entière · seul ce trade est affiché",
+      );
     } catch (error) {
       if (!controller.signal.aborted)
         setNotice(error instanceof Error ? error.message : "Historique indisponible");
@@ -301,6 +313,7 @@ export function MarketTerminal({
     setPositionOverview(false);
     setTradeHistory(null);
     setFocusedTrade(null);
+    setExecutionFocus(null);
     setTradeLoading(false);
     setReplay(null);
     setPlaying(false);
@@ -333,13 +346,15 @@ export function MarketTerminal({
     });
   };
   const resetZoom = () => {
+    setScaleReset((value) => value + 1);
     const total = history?.bars.length ?? 0;
     if (total < 2) return;
     if (focusedTrade && history) {
       const window = tradeWindow(
         history.bars,
-        Date.parse(focusedTrade.openedAt),
-        focusedTrade.closedAt ? Date.parse(focusedTrade.closedAt) : history.bars.at(-1)!.time,
+        executionFocus?.from ?? Date.parse(focusedTrade.openedAt),
+        executionFocus?.to ??
+          (focusedTrade.closedAt ? Date.parse(focusedTrade.closedAt) : history.bars.at(-1)!.time),
       );
       getChart()?.dispatchAction({
         type: "dataZoom",
@@ -804,13 +819,17 @@ export function MarketTerminal({
                     focusedTrade
                       ? {
                           key: focusedTrade.key,
-                          from: Date.parse(focusedTrade.openedAt),
-                          to: focusedTrade.closedAt
-                            ? Date.parse(focusedTrade.closedAt)
-                            : history.bars.at(-1)!.time,
+                          from: executionFocus?.from ?? Date.parse(focusedTrade.openedAt),
+                          to:
+                            executionFocus?.to ??
+                            (focusedTrade.closedAt
+                              ? Date.parse(focusedTrade.closedAt)
+                              : history.bars.at(-1)!.time),
                         }
                       : undefined
                   }
+                  executionId={executionFocus?.id}
+                  scaleReset={scaleReset}
                   replayMode={!!replay}
                   onReady={(c) => {
                     chart.current = c;
@@ -868,6 +887,27 @@ export function MarketTerminal({
                   Direct
                 </button>
               )}
+              {focusedTrade && !replay && (
+                <button
+                  className={s.button}
+                  onClick={() =>
+                    void showTrade(
+                      focusedTrade,
+                      executionFocus
+                        ? undefined
+                        : [...focusedTrade.events]
+                            .sort((a, b) => a.time - b.time)
+                            .findLast((event) => event.kind === "entry")?.id,
+                      !!executionFocus,
+                    )
+                  }
+                  aria-label={
+                    executionFocus ? "Afficher la position entière" : "Centrer sur le dernier achat"
+                  }
+                >
+                  {executionFocus ? "Position entière" : "Dernier achat"}
+                </button>
+              )}
               <button
                 className={s.button}
                 aria-label="Afficher toutes les bougies"
@@ -905,8 +945,8 @@ export function MarketTerminal({
         symbol={symbol}
         timeZone={timeZone}
         container={host.current}
-        onShowTrade={(trade) => {
-          void showTrade(trade);
+        onShowTrade={(trade, executionId) => {
+          void showTrade(trade, executionId);
           host.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
       />

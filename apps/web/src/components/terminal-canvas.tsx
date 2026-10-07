@@ -30,7 +30,12 @@ import { number, priceNumber, timestamp } from "@/lib/journal-format";
 import type { executionChart } from "@/lib/execution-chart";
 import { chartMarkers } from "@/lib/chart-markers";
 import { riskZones } from "@/lib/risk-zones";
-import { candleBounds, tradeWindow, zoomIndices } from "@/lib/terminal-viewport";
+import {
+  candleBounds,
+  scaledCandleBounds,
+  tradeWindow,
+  zoomIndices,
+} from "@/lib/terminal-viewport";
 import { drawingPath } from "@/lib/terminal-tools";
 import type { riskTimeline } from "@/lib/bot-risk";
 echarts.use([
@@ -68,6 +73,8 @@ export function TerminalCanvas({
   height,
   fullPeriod = false,
   focus,
+  executionId,
+  scaleReset = 0,
   replayMode = false,
   onReady,
   onDraw,
@@ -88,6 +95,8 @@ export function TerminalCanvas({
   height: string;
   fullPeriod?: boolean;
   focus?: { key: string; from: number; to: number };
+  executionId?: string;
+  scaleReset?: number;
   replayMode?: boolean;
   onReady: (chart: TerminalChart) => void;
   onDraw: (drawing: Drawing) => void;
@@ -104,6 +113,11 @@ export function TerminalCanvas({
         end: bars.length - 1,
       };
   const [viewport, setViewport] = useState(initialWindow);
+  const [priceScale, setPriceScale] = useState(1);
+  const axisDrag = useRef<{ y: number; scale: number } | null>(null);
+  useEffect(() => {
+    setPriceScale(1);
+  }, [scaleReset]);
   const zoomStorageKey = `market-chart-zoom-v2:${history.symbol}:${history.resolution}:${replayMode ? "replay" : (focus?.key ?? "live")}`;
   const hoverAxis = useRef(0);
   const dragging = useRef(false);
@@ -535,7 +549,16 @@ export function TerminalCanvas({
     return () => cancelAnimationFrame(frame);
   }, [bars.length, fullPeriod]);
 
-  const priceBounds = candleBounds(bars, viewport.start, viewport.end);
+  const baseBounds = candleBounds(bars, viewport.start, viewport.end);
+  const priceBounds = scaledCandleBounds(baseBounds, priceScale);
+  const scaleAxis = (scale: number) => {
+    const value = Math.min(8, Math.max(0.25, scale));
+    setPriceScale(value);
+    const bounds = scaledCandleBounds(baseBounds, value);
+    // Update immediately while EChart defers React redraws during pointer dragging.
+    instance.current?.setOption({ yAxis: [{ min: bounds?.min, max: bounds?.max }] });
+  };
+  const displayEvents = executionId ? events.filter((event) => event.id === executionId) : events;
   const times = bars.map((b) => timestamp(new Date(b.time).toISOString(), timeZone));
   const findIndex = (time: number) =>
     bars.findIndex(
@@ -544,8 +567,8 @@ export function TerminalCanvas({
         Math.floor(time / RESOLUTIONS[history.resolution]) * RESOLUTIONS[history.resolution],
     );
   const marks = (kind: "entry" | "exit") =>
-    chartMarkers(bars, RESOLUTIONS[history.resolution], events, kind);
-  const markerSize = events.length > 40 ? 4 : 6;
+    chartMarkers(bars, RESOLUTIONS[history.resolution], displayEvents, kind);
+  const markerSize = displayEvents.length > 40 ? 4 : 6;
   const chartPrice = (value: number) =>
     marketPrice(value).replace(/([,.]\d*?[1-9])0+$|[,.]0+$/, "$1");
   const risk = (key: "stopLoss" | "takeProfit") =>
@@ -584,7 +607,7 @@ export function TerminalCanvas({
       content =
         cell("Cours", chartPrice(bar.close)) +
         cell("Variation de la bougie", `${number((bar.close / bar.open - 1) * 100, 2)} %`);
-    const fills = events.filter(
+    const fills = displayEvents.filter(
       (e) =>
         Math.floor(e.time / RESOLUTIONS[history.resolution]) * RESOLUTIONS[history.resolution] ===
         bar.time,
@@ -976,9 +999,16 @@ export function TerminalCanvas({
             },
           },
           itemStyle: { color: "#f2364512", borderColor: "#f2364535", borderWidth: 1 },
-          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "stopLoss").map(
-            ([start, end]) => [{ ...start, name: "SL visuel · " + priceNumber(end.yAxis) }, end],
-          ),
+          data: riskZones(
+            bars,
+            RESOLUTIONS[history.resolution],
+            levels,
+            "stopLoss",
+            executionId,
+          ).map(([start, end]) => [
+            { ...start, name: "SL visuel · " + priceNumber(end.yAxis) },
+            end,
+          ]),
         },
         step: "end",
         showSymbol: false,
@@ -1002,9 +1032,16 @@ export function TerminalCanvas({
             },
           },
           itemStyle: { color: "#08998112", borderColor: "#08998135", borderWidth: 1 },
-          data: riskZones(bars, RESOLUTIONS[history.resolution], levels, "takeProfit").map(
-            ([start, end]) => [{ ...start, name: "TP visuel · " + priceNumber(end.yAxis) }, end],
-          ),
+          data: riskZones(
+            bars,
+            RESOLUTIONS[history.resolution],
+            levels,
+            "takeProfit",
+            executionId,
+          ).map(([start, end]) => [
+            { ...start, name: "TP visuel · " + priceNumber(end.yAxis) },
+            end,
+          ]),
         },
         step: "end",
         showSymbol: false,
@@ -1076,6 +1113,39 @@ export function TerminalCanvas({
         </div>
       )}
       <EChart option={option} height="100%" preserveZoom onReady={ready} />
+      <div
+        data-price-axis-drag
+        title="Glisse vers le haut pour agrandir les bougies. Double-clic : échelle automatique."
+        style={{
+          position: "absolute",
+          right: 0,
+          top: "6%",
+          height: `${layout.mainHeight}%`,
+          width: 85,
+          cursor: "ns-resize",
+          touchAction: "none",
+        }}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          axisDrag.current = { y: event.clientY, scale: priceScale };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (!axisDrag.current) return;
+          event.preventDefault();
+          scaleAxis(axisDrag.current.scale * Math.exp((axisDrag.current.y - event.clientY) / 150));
+        }}
+        onPointerUp={(event) => {
+          axisDrag.current = null;
+          if (event.currentTarget.hasPointerCapture(event.pointerId))
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {
+          axisDrag.current = null;
+        }}
+        onDoubleClick={() => scaleAxis(1)}
+      />
     </div>
   );
 }

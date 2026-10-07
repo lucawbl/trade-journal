@@ -1,7 +1,7 @@
 import { bad, handler, ok } from "@/server/api";
 import { getTradeByKey, queryTrades } from "@/server/trades-query";
 import { binance } from "@/server/market-data/public-crypto";
-import { chartResolution } from "@/lib/bot-risk";
+import { compactTradeResolution, executionChartRange } from "@/lib/terminal-viewport";
 import { isResolution, RESOLUTIONS } from "@/lib/market-data";
 
 export const GET = handler(
@@ -21,10 +21,18 @@ export const GET = handler(
     const earliest = overview
       ? Math.min(opened, ...related.map((row) => Date.parse(row.openedAt)).filter(Number.isFinite))
       : opened;
-    const from = Math.max(0, earliest - 30 * 60_000),
+    let from = Math.max(0, earliest - 30 * 60_000),
       to = overview ? now : Math.min(now, closed + 30 * 60_000);
+    const at = new URL(request.url).searchParams.get("at");
+    if (at != null) {
+      const focus = executionChartRange(opened, closed, Number(at));
+      if (!focus || overview) return bad("Exécution hors de la période du trade");
+      from = focus.from;
+      to = Math.min(now, focus.to);
+    }
     const selected = new URL(request.url).searchParams.get("resolution");
-    const resolution = selected && isResolution(selected) ? selected : chartResolution(from, to);
+    const resolution =
+      selected && isResolution(selected) ? selected : compactTradeResolution(from, to);
     if (selected && !isResolution(selected)) return bad("Unité de temps invalide");
     if ((to - from) / RESOLUTIONS[resolution] > 1500)
       return bad("Choisissez une unité de temps plus grande pour ce trade");

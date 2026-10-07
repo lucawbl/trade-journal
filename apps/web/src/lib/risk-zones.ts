@@ -6,6 +6,7 @@ export function riskZones(
   step: number,
   levels: ReturnType<typeof riskTimeline>,
   key: "stopLoss" | "takeProfit",
+  executionId?: string,
 ) {
   if (!bars.length) return [];
   const first = bars[0]!.time,
@@ -19,6 +20,7 @@ export function riskZones(
   }
   return [...groups.values()].flatMap((group) =>
     group.flatMap((entry, index) => {
+      if (executionId && entry.id !== executionId) return [];
       if (entry.kind !== "entry" || entry.position <= 1e-10) return [];
       const entryIndex = bars.findIndex(
         (bar) => bar.time <= entry.time && bar.time + step > entry.time,

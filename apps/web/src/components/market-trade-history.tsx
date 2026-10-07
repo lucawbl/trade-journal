@@ -45,7 +45,7 @@ export function MarketTradeHistory({
   symbol: string;
   timeZone: string;
   container: HTMLElement | null;
-  onShowTrade: (trade: TerminalTrade) => void;
+  onShowTrade: (trade: TerminalTrade, executionId?: string) => void;
 }) {
   const [all, setAll] = useState(false);
   const [selected, setSelected] = useState<TerminalTrade | null>(null);
@@ -219,7 +219,7 @@ export function MarketTradeHistory({
                   <table className="w-full whitespace-nowrap text-left">
                     <thead className="text-muted-foreground">
                       <tr>
-                        {["Date", "Sens", "Prix", "Quantité", "Frais"].map((label) => (
+                        {["Date", "Sens", "Prix", "Quantité", "Frais", "Graphique"].map((label) => (
                           <th className="px-2 py-2 font-normal" key={label}>
                             {label}
                           </th>
@@ -238,6 +238,18 @@ export function MarketTradeHistory({
                           <td className="px-2 py-2">{priceNumber(fill.price)}</td>
                           <td className="px-2 py-2">{number(fill.quantity, 6)}</td>
                           <td className="px-2 py-2">{priceNumber(fill.fee)}</td>
+                          <td className="px-2 py-2">
+                            <button
+                              className="rounded-md border p-2 text-brand"
+                              aria-label={`Voir ${fill.side === "buy" ? "l’achat" : "la vente"} du ${timestamp(fill.executedAt, timeZone)} sur le graphique`}
+                              onClick={() => {
+                                if (selected) onShowTrade(selected, fill.id);
+                                setSelected(null);
+                              }}
+                            >
+                              <ChartNoAxesCombined size={16} />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
